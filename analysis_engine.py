@@ -169,11 +169,59 @@ def one_way_anova(outcome, group):
 
     result = stats.f_oneway(*groups)
 
+    # ---- Full ANOVA table (sums of squares, df, mean squares) ----
+    values_all = data["outcome"].astype(float).values
+    n_total = len(values_all)
+    k = len(groups)
+    grand_mean = values_all.mean()
+
+    ss_between = float(sum(
+        len(g) * (np.mean(g) - grand_mean) ** 2 for g in groups
+    ))
+    ss_within = float(sum(
+        ((np.asarray(g, dtype=float) - np.mean(g)) ** 2).sum()
+        for g in groups
+    ))
+    ss_total = ss_between + ss_within
+
+    df_between = k - 1
+    df_within = n_total - k
+    df_total = n_total - 1
+
+    ms_between = ss_between / df_between
+    ms_within = ss_within / df_within if df_within > 0 else np.nan
+
+    eta_squared = ss_between / ss_total if ss_total > 0 else np.nan
+
+    anova_table = pd.DataFrame({
+        "Source": [
+            "Between groups (SSB / treatment)",
+            "Within groups (SSE / error)",
+            "Total (SST)"
+        ],
+        "Sum of Squares": [ss_between, ss_within, ss_total],
+        "df": [df_between, df_within, df_total],
+        "Mean Square": [ms_between, ms_within, np.nan],
+        "F": [result.statistic, np.nan, np.nan],
+        "p-value": [result.pvalue, np.nan, np.nan],
+    })
+
     return {
         "test": "One-way ANOVA",
         "statistic": result.statistic,
         "p_value": result.pvalue,
-        "number_of_groups": len(groups)
+        "number_of_groups": k,
+        "n": n_total,
+        "ss_between": ss_between,
+        "ss_within": ss_within,
+        "ss_total": ss_total,
+        "df_between": df_between,
+        "df_within": df_within,
+        "df_total": df_total,
+        "ms_between": ms_between,
+        "ms_within": ms_within,
+        "eta_squared": eta_squared,
+        "anova_table": anova_table
     }
 
 
