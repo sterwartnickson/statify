@@ -54,6 +54,15 @@ from anova_engine import (
     main_effect_interpretation,
     cell_means
 )
+from regression_engine import (
+    linear_regression,
+    interpret_linear_regression,
+    linear_regression_warnings,
+    binary_outcome_candidates,
+    binary_logistic_regression,
+    interpret_logistic_regression,
+    logistic_regression_warnings,
+)
 from nonparametric_engine import (
     mann_whitney_analysis,
     kruskal_analysis,
@@ -2249,251 +2258,376 @@ else:
             )
 
         elif page == "🧪 Analyze":
-            # ============================================================
-            # BATCH 8 — SIMPLE ANALYSIS GUIDE
-            # ============================================================
-            st.header("🧭 Analysis Guide")
-            st.caption("Not sure which statistical method to use? Start here.")
-
-            guide_choice = st.radio(
-                "What are you trying to find out?",
-                [
-                    "Compare groups",
-                    "Find a relationship",
-                    "Check association between categories",
-                ],
-                horizontal=True,
-                key="statify_analysis_goal",
+            st.header("🧪 Analyze")
+            st.caption(
+                "Run a test in the first tab. Use the other tabs when you "
+                "need help choosing a method or checking assumptions."
             )
 
-            if guide_choice == "Compare groups":
-                st.info(
-                    "**You want to know whether groups differ.**\n\n"
-                "• 2 independent groups → Independent t-test (or Welch's t-test when variances differ)\n"
-                "• 2 paired measurements → Paired t-test\n"
-                "• 3 or more groups → One-way ANOVA\n"
-                "• Two factors → Two-way ANOVA\n\n"
-                "If the usual assumptions are not suitable, Statify can guide you toward a non-parametric alternative."
-                )
-            elif guide_choice == "Find a relationship":
-                st.info(
-                    "**You want to know whether two numerical variables move together.**\n\n"
-                "• Pearson correlation → measures linear association\n"
-                "• Spearman correlation → useful when the relationship is based on ranks or normality is a concern\n"
-                "Remember: correlation does not prove causation."
-                )
-            else:
-                st.info(
-                    "**You want to know whether two categorical variables are associated.**\n\n"
-                "• Chi-square test → common choice for categorical variables\n"
-                "• Fisher's exact test → useful for small expected frequencies\n\n"
-                "Statify will also help you check whether the test's assumptions are reasonable."
-                )
+            (
+                tab_run,
+                tab_guide,
+                tab_assumptions,
+                tab_nonparam,
+            ) = st.tabs([
+                "🧪 Run a Test",
+                "🧭 Guide & Advisor",
+                "🔬 Assumption Checks",
+                "📉 Non-Parametric Guide",
+            ])
 
-            st.divider()
+            with tab_guide:
+                # ============================================================
+                # BATCH 8 — SIMPLE ANALYSIS GUIDE
+                # ============================================================
+                st.header("🧭 Analysis Guide")
+                st.caption("Not sure which statistical method to use? Start here.")
 
-            # ============================================================
-            # STATISTICAL TEST ADVISOR
-            # ============================================================
-
-            st.divider()
-
-            st.header("🧪 Statistical Test Advisor")
-
-            st.write(
-                "Select two variables and Statify will identify statistical "
-            "methods that may be appropriate for examining their relationship."
-            )
-
-            test_col1, test_col2 = st.columns(2)
-
-            with test_col1:
-
-                variable_x = st.selectbox(
-                    "First variable",
-                    df.columns,
-                    key="test_variable_x"
+                guide_choice = st.radio(
+                    "What are you trying to find out?",
+                    [
+                        "Compare groups",
+                        "Find a relationship",
+                        "Check association between categories",
+                    ],
+                    horizontal=True,
+                    key="statify_analysis_goal",
                 )
 
-            with test_col2:
-
-                variable_y = st.selectbox(
-                    "Second variable",
-                    df.columns,
-                    key="test_variable_y"
-                )
-
-
-            if variable_x == variable_y:
-
-                st.warning(
-                    "Please select two different variables."
-                )
-
-            else:
-
-                x = df[variable_x]
-                y = df[variable_y]
-
-                # --------------------------------------------------------
-                # VARIABLE INFORMATION
-                # --------------------------------------------------------
-
-                st.subheader("Variable Relationship")
-
-                info_col1, info_col2 = st.columns(2)
-
-                with info_col1:
-
-                    st.write(
-                        f"**{variable_x}**"
+                if guide_choice == "Compare groups":
+                    st.info(
+                        "**You want to know whether groups differ.**\n\n"
+                    "• 2 independent groups → Independent t-test (or Welch's t-test when variances differ)\n"
+                    "• 2 paired measurements → Paired t-test\n"
+                    "• 3 or more groups → One-way ANOVA\n"
+                    "• Two factors → Two-way ANOVA\n\n"
+                    "If the usual assumptions are not suitable, Statify can guide you toward a non-parametric alternative."
+                    )
+                elif guide_choice == "Find a relationship":
+                    st.info(
+                        "**You want to know whether two numerical variables move together.**\n\n"
+                    "• Pearson correlation → measures linear association\n"
+                    "• Spearman correlation → useful when the relationship is based on ranks or normality is a concern\n"
+                    "• Linear regression → predict a numerical outcome from one or more predictors\n"
+                    "• Binary logistic regression → predict a yes/no outcome from one or more predictors\n"
+                    "Remember: correlation does not prove causation."
+                    )
+                else:
+                    st.info(
+                        "**You want to know whether two categorical variables are associated.**\n\n"
+                    "• Chi-square test → common choice for categorical variables\n"
+                    "• Fisher's exact test → useful for small expected frequencies\n\n"
+                    "Statify will also help you check whether the test's assumptions are reasonable."
                     )
 
-                    st.write(
-                        f"Type: `{profile_variables(df).loc[
-                        profile_variables(df)['Variable'] == variable_x,
-                        'Type'
-                    ].iloc[0]}`"
-                    )
+                st.divider()
 
-                with info_col2:
+                # ============================================================
+                # STATISTICAL TEST ADVISOR
+                # ============================================================
 
-                    st.write(
-                        f"**{variable_y}**"
-                    )
+                st.divider()
 
-                    st.write(
-                        f"Type: `{profile_variables(df).loc[
-                        profile_variables(df)['Variable'] == variable_y,
-                        'Type'
-                    ].iloc[0]}`"
-                    )
+                st.header("🧪 Statistical Test Advisor")
 
-                # --------------------------------------------------------
-                # RECOMMENDATIONS
-                # --------------------------------------------------------
-
-                recommendations = recommend_tests(
-                    x,
-                    y
+                st.write(
+                    "Select two variables and Statify will identify statistical "
+                "methods that may be appropriate for examining their relationship."
                 )
 
-                st.subheader(
-                    "🎯 Recommended Statistical Methods"
-                )
+                test_col1, test_col2 = st.columns(2)
 
-                if recommendations.empty:
+                with test_col1:
+
+                    variable_x = st.selectbox(
+                        "First variable",
+                        df.columns,
+                        key="test_variable_x"
+                    )
+
+                with test_col2:
+
+                    variable_y = st.selectbox(
+                        "Second variable",
+                        df.columns,
+                        key="test_variable_y"
+                    )
+
+
+                if variable_x == variable_y:
 
                     st.warning(
-                        "Statify could not identify an appropriate "
-                    "method for these variables."
+                        "Please select two different variables."
                     )
 
                 else:
 
-                    for _, recommendation in recommendations.iterrows():
+                    x = df[variable_x]
+                    y = df[variable_y]
 
-                        st.markdown(
-                            f"### {recommendation['Test']}"
+                    # --------------------------------------------------------
+                    # VARIABLE INFORMATION
+                    # --------------------------------------------------------
+
+                    st.subheader("Variable Relationship")
+
+                    info_col1, info_col2 = st.columns(2)
+
+                    with info_col1:
+
+                        st.write(
+                            f"**{variable_x}**"
                         )
 
                         st.write(
-                            f"**Purpose:** "
-                        f"{recommendation['Purpose']}"
+                            f"Type: `{profile_variables(df).loc[
+                            profile_variables(df)['Variable'] == variable_x,
+                            'Type'
+                        ].iloc[0]}`"
+                        )
+
+                    with info_col2:
+
+                        st.write(
+                            f"**{variable_y}**"
                         )
 
                         st.write(
-                            f"**Why:** "
-                        f"{recommendation['Reason']}"
+                            f"Type: `{profile_variables(df).loc[
+                            profile_variables(df)['Variable'] == variable_y,
+                            'Type'
+                        ].iloc[0]}`"
                         )
 
-                        st.divider()
-            # ============================================================
-            # ASSUMPTION & DIAGNOSTIC EXPLORER
-            # ============================================================
+                    # --------------------------------------------------------
+                    # RECOMMENDATIONS
+                    # --------------------------------------------------------
 
-            st.divider()
-
-            st.header("🔬 Assumption & Diagnostic Explorer")
-
-            st.write(
-                "Statify examines important statistical assumptions before "
-            "you choose a final inferential method."
-            )
-
-            diagnostic_type = st.selectbox(
-                "Select analysis design",
-                [
-                    "Two independent groups",
-                    "Three or more independent groups",
-                    "Categorical association"
-                ],
-                key="diagnostic_type"
-            )
-
-
-            # ============================================================
-            # TWO GROUPS
-            # ============================================================
-
-            if diagnostic_type == "Two independent groups":
-
-                st.subheader("Two-Group Comparison")
-
-                outcome_col, group_col = st.columns(2)
-
-                with outcome_col:
-
-                    diagnostic_outcome = st.selectbox(
-                        "Numerical outcome",
-                        df.columns,
-                        key="diagnostic_two_outcome"
+                    recommendations = recommend_tests(
+                        x,
+                        y
                     )
 
-                with group_col:
-
-                    diagnostic_group = st.selectbox(
-                        "Grouping variable",
-                        df.columns,
-                        key="diagnostic_two_group"
+                    st.subheader(
+                        "🎯 Recommended Statistical Methods"
                     )
 
-                if diagnostic_outcome == diagnostic_group:
+                    if recommendations.empty:
 
-                    st.warning(
-                        "The outcome and grouping variable must be different."
-                    )
-
-                else:
-
-                    result = diagnose_two_group_comparison(
-                        df[diagnostic_outcome],
-                        df[diagnostic_group]
-                    )
-
-                    if not result["valid"]:
-
-                        st.error(
-                            result["message"]
+                        st.warning(
+                            "Statify could not identify an appropriate "
+                        "method for these variables."
                         )
 
                     else:
 
-                        st.subheader("📋 Diagnostic Summary")
+                        for _, recommendation in recommendations.iterrows():
 
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-
-                            st.write("**Group sizes**")
-
-                            st.write(
-                                result["group_sizes"]
+                            st.markdown(
+                                f"### {recommendation['Test']}"
                             )
 
-                        with col2:
+                            st.write(
+                                f"**Purpose:** "
+                            f"{recommendation['Purpose']}"
+                            )
 
-                            st.write("**Variance assessment**")
+                            st.write(
+                                f"**Why:** "
+                            f"{recommendation['Reason']}"
+                            )
+
+                            st.divider()
+            with tab_assumptions:
+                # ============================================================
+                # ASSUMPTION & DIAGNOSTIC EXPLORER
+                # ============================================================
+
+                st.divider()
+
+                st.header("🔬 Assumption & Diagnostic Explorer")
+
+                st.write(
+                    "Statify examines important statistical assumptions before "
+                "you choose a final inferential method."
+                )
+
+                diagnostic_type = st.selectbox(
+                    "Select analysis design",
+                    [
+                        "Two independent groups",
+                        "Three or more independent groups",
+                        "Categorical association"
+                    ],
+                    key="diagnostic_type"
+                )
+
+
+                # ============================================================
+                # TWO GROUPS
+                # ============================================================
+
+                if diagnostic_type == "Two independent groups":
+
+                    st.subheader("Two-Group Comparison")
+
+                    outcome_col, group_col = st.columns(2)
+
+                    with outcome_col:
+
+                        diagnostic_outcome = st.selectbox(
+                            "Numerical outcome",
+                            df.columns,
+                            key="diagnostic_two_outcome"
+                        )
+
+                    with group_col:
+
+                        diagnostic_group = st.selectbox(
+                            "Grouping variable",
+                            df.columns,
+                            key="diagnostic_two_group"
+                        )
+
+                    if diagnostic_outcome == diagnostic_group:
+
+                        st.warning(
+                            "The outcome and grouping variable must be different."
+                        )
+
+                    else:
+
+                        result = diagnose_two_group_comparison(
+                            df[diagnostic_outcome],
+                            df[diagnostic_group]
+                        )
+
+                        if not result["valid"]:
+
+                            st.error(
+                                result["message"]
+                            )
+
+                        else:
+
+                            st.subheader("📋 Diagnostic Summary")
+
+                            col1, col2 = st.columns(2)
+
+                            with col1:
+
+                                st.write("**Group sizes**")
+
+                                st.write(
+                                    result["group_sizes"]
+                                )
+
+                            with col2:
+
+                                st.write("**Variance assessment**")
+
+                                if result["variance"]:
+
+                                    st.write(
+                                        f"Levene p-value: "
+                                    f"**{result['variance']['p_value']:.4f}**"
+                                    )
+
+                                    st.write(
+                                        result["variance"]["Interpretation"]
+                                    )
+
+                            st.subheader("Normality by Group")
+
+                            if not result["normality"].empty:
+
+                                st.dataframe(
+                                    result["normality"],
+                                    use_container_width=True
+                                )
+
+                            st.subheader("🚨 Outlier Assessment")
+
+                            for group_name, outlier_result in result[
+                                "outliers"
+                            ].items():
+
+                                if outlier_result:
+
+                                    st.write(
+                                        f"**{group_name}:** "
+                                    f"{outlier_result['Outlier Count']} "
+                                    "potential outlier(s)"
+                                    )
+
+                            st.subheader("💡 Statify's Diagnostic Guidance")
+
+                            for recommendation in result[
+                                "recommendations"
+                            ]:
+
+                                st.info(
+                                    recommendation
+                                )
+
+
+                # ============================================================
+                # THREE OR MORE GROUPS
+                # ============================================================
+
+                elif diagnostic_type == "Three or more independent groups":
+
+                    st.subheader("Multi-Group Comparison")
+
+                    outcome_col, group_col = st.columns(2)
+
+                    with outcome_col:
+
+                        diagnostic_outcome = st.selectbox(
+                            "Numerical outcome",
+                            df.columns,
+                            key="diagnostic_multi_outcome"
+                        )
+
+                    with group_col:
+
+                        diagnostic_group = st.selectbox(
+                            "Grouping variable",
+                            df.columns,
+                            key="diagnostic_multi_group"
+                        )
+
+                    if diagnostic_outcome == diagnostic_group:
+
+                        st.warning(
+                            "The outcome and grouping variable must be different."
+                        )
+
+                    else:
+
+                        result = diagnose_multi_group_comparison(
+                            df[diagnostic_outcome],
+                            df[diagnostic_group]
+                        )
+
+                        if not result["valid"]:
+
+                            st.error(
+                                result["message"]
+                            )
+
+                        else:
+
+                            st.subheader("Normality by Group")
+
+                            if not result["normality"].empty:
+
+                                st.dataframe(
+                                    result["normality"],
+                                    use_container_width=True
+                                )
+
+                            st.subheader("Variance Assessment")
 
                             if result["variance"]:
 
@@ -2506,612 +2640,1037 @@ else:
                                     result["variance"]["Interpretation"]
                                 )
 
-                        st.subheader("Normality by Group")
+                            st.subheader("🚨 Outlier Assessment")
 
-                        if not result["normality"].empty:
+                            for group_name, outlier_result in result[
+                                "outliers"
+                            ].items():
 
-                            st.dataframe(
-                                result["normality"],
-                                use_container_width=True
-                            )
+                                if outlier_result:
 
-                        st.subheader("🚨 Outlier Assessment")
+                                    st.write(
+                                        f"**{group_name}:** "
+                                    f"{outlier_result['Outlier Count']} "
+                                    "potential outlier(s)"
+                                    )
 
-                        for group_name, outlier_result in result[
-                            "outliers"
-                        ].items():
+                            st.subheader("💡 Statify's Diagnostic Guidance")
 
-                            if outlier_result:
+                            for recommendation in result[
+                                "recommendations"
+                            ]:
 
-                                st.write(
-                                    f"**{group_name}:** "
-                                f"{outlier_result['Outlier Count']} "
-                                "potential outlier(s)"
+                                st.info(
+                                    recommendation
                                 )
 
-                        st.subheader("💡 Statify's Diagnostic Guidance")
 
-                        for recommendation in result[
-                            "recommendations"
-                        ]:
-
-                            st.info(
-                                recommendation
-                            )
-
-
-            # ============================================================
-            # THREE OR MORE GROUPS
-            # ============================================================
-
-            elif diagnostic_type == "Three or more independent groups":
-
-                st.subheader("Multi-Group Comparison")
-
-                outcome_col, group_col = st.columns(2)
-
-                with outcome_col:
-
-                    diagnostic_outcome = st.selectbox(
-                        "Numerical outcome",
-                        df.columns,
-                        key="diagnostic_multi_outcome"
-                    )
-
-                with group_col:
-
-                    diagnostic_group = st.selectbox(
-                        "Grouping variable",
-                        df.columns,
-                        key="diagnostic_multi_group"
-                    )
-
-                if diagnostic_outcome == diagnostic_group:
-
-                    st.warning(
-                        "The outcome and grouping variable must be different."
-                    )
+                # ============================================================
+                # CATEGORICAL ASSOCIATION
+                # ============================================================
 
                 else:
 
-                    result = diagnose_multi_group_comparison(
-                        df[diagnostic_outcome],
-                        df[diagnostic_group]
+                    st.subheader(
+                        "Categorical Association Diagnostic"
                     )
 
-                    if not result["valid"]:
+                    variable_col1, variable_col2 = st.columns(2)
 
-                        st.error(
-                            result["message"]
+                    with variable_col1:
+
+                        categorical_1 = st.selectbox(
+                            "First categorical variable",
+                            df.columns,
+                            key="diagnostic_cat_1"
                         )
 
-                    else:
+                    with variable_col2:
 
-                        st.subheader("Normality by Group")
-
-                        if not result["normality"].empty:
-
-                            st.dataframe(
-                                result["normality"],
-                                use_container_width=True
-                            )
-
-                        st.subheader("Variance Assessment")
-
-                        if result["variance"]:
-
-                            st.write(
-                                f"Levene p-value: "
-                            f"**{result['variance']['p_value']:.4f}**"
-                            )
-
-                            st.write(
-                                result["variance"]["Interpretation"]
-                            )
-
-                        st.subheader("🚨 Outlier Assessment")
-
-                        for group_name, outlier_result in result[
-                            "outliers"
-                        ].items():
-
-                            if outlier_result:
-
-                                st.write(
-                                    f"**{group_name}:** "
-                                f"{outlier_result['Outlier Count']} "
-                                "potential outlier(s)"
-                                )
-
-                        st.subheader("💡 Statify's Diagnostic Guidance")
-
-                        for recommendation in result[
-                            "recommendations"
-                        ]:
-
-                            st.info(
-                                recommendation
-                            )
-
-
-            # ============================================================
-            # CATEGORICAL ASSOCIATION
-            # ============================================================
-
-            else:
-
-                st.subheader(
-                    "Categorical Association Diagnostic"
-                )
-
-                variable_col1, variable_col2 = st.columns(2)
-
-                with variable_col1:
-
-                    categorical_1 = st.selectbox(
-                        "First categorical variable",
-                        df.columns,
-                        key="diagnostic_cat_1"
-                    )
-
-                with variable_col2:
-
-                    categorical_2 = st.selectbox(
-                        "Second categorical variable",
-                        df.columns,
-                        key="diagnostic_cat_2"
-                    )
-
-                if categorical_1 == categorical_2:
-
-                    st.warning(
-                        "Please select two different variables."
-                    )
-
-                else:
-
-                    result = chi_square_diagnostics(
-                        df[categorical_1],
-                        df[categorical_2]
-                    )
-
-                    if result is None:
-
-                        st.error(
-                            "The selected variables could not form "
-                        "a valid contingency table."
+                        categorical_2 = st.selectbox(
+                            "Second categorical variable",
+                            df.columns,
+                            key="diagnostic_cat_2"
                         )
 
-                    else:
-
-                        st.subheader("Observed Frequencies")
-
-                        st.dataframe(
-                            result["Observed"],
-                            use_container_width=True
-                        )
-
-                        st.subheader("Expected Frequencies")
-
-                        st.dataframe(
-                            result["Expected"],
-                            use_container_width=True
-                        )
-
-                        col1, col2, col3 = st.columns(3)
-
-                        with col1:
-
-                            st.metric(
-                                "Chi-square",
-                                f"{result['Chi-square']:.3f}"
-                            )
-
-                        with col2:
-
-                            st.metric(
-                                "p-value",
-                                f"{result['p_value']:.4f}"
-                            )
-
-                        with col3:
-
-                            st.metric(
-                                "Minimum Expected",
-                                f"{result['Minimum Expected Frequency']:.2f}"
-                            )
-
-                        st.info(
-                            result["Recommendation"]
-                        )
-            # ============================================================
-            # STATIFY ANALYSIS WORKSPACE
-            # ============================================================
-
-            st.divider()
-
-            st.header("🧪 Statistical Analysis Workspace")
-
-            st.write(
-                "Choose the structure of your research question. "
-            "Statify will then guide you toward an appropriate "
-            "statistical method."
-            )
-
-
-            analysis_design = st.selectbox(
-                "1️⃣ What type of analysis are you performing?",
-                [
-                    "Relationship between two numerical variables",
-                    "Compare two independent groups",
-                    "Compare three or more independent groups",
-                    "Compare paired measurements",
-                    "Two-Way ANOVA",
-                    "Association between categorical variables"
-                ],
-                key="analysis_design"
-            )
-
-
-            # ============================================================
-            # RELATIONSHIP
-            # ============================================================
-
-            if analysis_design == (
-                "Relationship between two numerical variables"
-            ):
-
-                st.subheader("📈 Correlation Analysis")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-
-                    x = st.selectbox(
-                        "First numerical variable",
-                        df.columns,
-                        key="corr_x"
-                    )
-
-                with col2:
-
-                    y = st.selectbox(
-                        "Second numerical variable",
-                        df.columns,
-                        key="corr_y"
-                    )
-
-                method = st.radio(
-                    "Method",
-                    [
-                        "Pearson correlation",
-                        "Spearman correlation"
-                    ],
-                    horizontal=True
-                )
-
-                if st.button(
-                    "▶ Run Correlation",
-                    key="run_correlation"
-                ):
-
-                    if x == y:
+                    if categorical_1 == categorical_2:
 
                         st.warning(
                             "Please select two different variables."
                         )
 
-                    elif method == "Pearson correlation":
-
-                        result = pearson(
-                            df[x],
-                            df[y]
-                        )
-
-                        r = result["statistic"]
-                        p = result["p_value"]
-                        decision = p_value_decision(p)
-
-                        st.subheader("📊 Correlation Result")
-
-                        col1, col2, col3 = st.columns(3)
-
-                        with col1:
-                            st.metric(
-                                "Correlation",
-                                f"{r:.3f}"
-                            )
-
-                        with col2:
-                            st.metric(
-                                "p-value",
-                                f"{p:.4f}"
-                            )
-
-                        with col3:
-                            st.metric(
-                                "R²",
-                                f"{correlation_r_squared(r):.3f}"
-                            )
-
-                        st.write(
-                            interpret_correlation(r)
-                        )
-
-                        st.write(
-                            interpret_r_squared(
-                                correlation_r_squared(r)
-                            )
-                        )
-
-                        if decision["significant"]:
-                            st.success(
-                                decision["decision"]
-                            )
-                        else:
-                            st.warning(
-                                decision["decision"]
-                            )
-
-                        st.write(
-                            decision["explanation"]
-                        )
-
                     else:
 
-                        result = spearman(
-                            df[x],
-                            df[y]
+                        result = chi_square_diagnostics(
+                            df[categorical_1],
+                            df[categorical_2]
                         )
 
-                        r = result["statistic"]
-                        p = result["p_value"]
-                        decision = p_value_decision(p)
+                        if result is None:
 
-                        st.subheader("📊 Correlation Result")
-
-                        col1, col2, col3 = st.columns(3)
-
-                        with col1:
-                            st.metric(
-                                "Correlation",
-                                f"{r:.3f}"
+                            st.error(
+                                "The selected variables could not form "
+                            "a valid contingency table."
                             )
 
-                        with col2:
-                            st.metric(
-                                "p-value",
-                                f"{p:.4f}"
-                            )
-
-                        with col3:
-                            st.metric(
-                                "R²",
-                                f"{correlation_r_squared(r):.3f}"
-                            )
-
-                        st.write(
-                            interpret_correlation(r)
-                        )
-
-                        st.write(
-                            interpret_r_squared(
-                                correlation_r_squared(r)
-                            )
-                        )
-
-                        if decision["significant"]:
-                            st.success(
-                                decision["decision"]
-                            )
                         else:
-                            st.warning(
-                                decision["decision"]
+
+                            st.subheader("Observed Frequencies")
+
+                            st.dataframe(
+                                result["Observed"],
+                                use_container_width=True
                             )
 
-                        st.write(
-                            decision["explanation"]
-                        )
+                            st.subheader("Expected Frequencies")
 
+                            st.dataframe(
+                                result["Expected"],
+                                use_container_width=True
+                            )
 
-            # ============================================================
-            # TWO INDEPENDENT GROUPS
-            # ============================================================
+                            col1, col2, col3 = st.columns(3)
 
-            elif analysis_design == (
-                "Compare two independent groups"
-            ):
+                            with col1:
 
-                st.subheader("⚖️ Two Independent Groups")
+                                st.metric(
+                                    "Chi-square",
+                                    f"{result['Chi-square']:.3f}"
+                                )
 
-                col1, col2 = st.columns(2)
+                            with col2:
 
-                with col1:
+                                st.metric(
+                                    "p-value",
+                                    f"{result['p_value']:.4f}"
+                                )
 
-                    outcome = st.selectbox(
-                        "Numerical outcome",
-                        df.columns,
-                        key="two_group_outcome"
-                    )
+                            with col3:
 
-                with col2:
+                                st.metric(
+                                    "Minimum Expected",
+                                    f"{result['Minimum Expected Frequency']:.2f}"
+                                )
 
-                    group = st.selectbox(
-                        "Grouping variable",
-                        df.columns,
-                        key="two_group_variable"
-                    )
+                            st.info(
+                                result["Recommendation"]
+                            )
+            with tab_run:
 
-                method = st.selectbox(
-                    "Statistical method",
-                    [
-                        "Independent samples t-test",
-                        "Welch's t-test",
-                        "Mann-Whitney U"
-                    ],
-                    key="two_group_method"
+                # ============================================================
+                # TEST PICKER  (category -> test)
+                # ============================================================
+                st.header("🧪 Run a Statistical Test")
+                st.write(
+                    "Pick a category, then the test. Only that test's "
+                    "options are shown below."
                 )
 
-                if st.button(
-                    "▶ Run Two-Group Analysis",
-                    key="run_two_group"
+                # label -> (workspace branch, preset method, short description)
+                TEST_CATALOG = {
+                    "📈 Regression": {
+                        "Linear regression": (
+                            "Linear regression", None,
+                            "Predict a numerical outcome from one or more predictors."
+                        ),
+                        "Binary logistic regression": (
+                            "Binary logistic regression", None,
+                            "Predict a yes/no outcome from one or more predictors; "
+                            "reports odds ratios."
+                        ),
+                    },
+                    "📊 ANOVA": {
+                        "One-Way ANOVA": (
+                            "Compare three or more independent groups",
+                            "One-Way ANOVA",
+                            "Compare the means of 3+ groups on one numerical outcome."
+                        ),
+                        "Two-Way ANOVA": (
+                            "Two-Way ANOVA", None,
+                            "Two categorical factors on one numerical outcome, "
+                            "including their interaction."
+                        ),
+                        "Welch's ANOVA": (
+                            "Compare three or more independent groups",
+                            "Welch's ANOVA",
+                            "3+ groups when group variances are unequal."
+                        ),
+                    },
+                    "⚖️ t-tests": {
+                        "Independent t-test": (
+                            "Compare two independent groups",
+                            "Independent samples t-test",
+                            "Compare the means of two separate groups."
+                        ),
+                        "Welch's t-test": (
+                            "Compare two independent groups",
+                            "Welch's t-test",
+                            "Two groups when variances or group sizes differ."
+                        ),
+                        "Paired t-test": (
+                            "Compare paired measurements", None,
+                            "Before/after or matched measurements on the same subjects."
+                        ),
+                    },
+                    "🔗 Correlation & Association": {
+                        "Pearson correlation": (
+                            "Relationship between two numerical variables",
+                            "Pearson correlation",
+                            "Linear relationship between two numerical variables."
+                        ),
+                        "Spearman correlation": (
+                            "Relationship between two numerical variables",
+                            "Spearman correlation",
+                            "Rank-based relationship; robust to outliers and non-normality."
+                        ),
+                        "Chi-square test": (
+                            "Association between categorical variables",
+                            "Chi-square test",
+                            "Association between two categorical variables."
+                        ),
+                        "Fisher's exact test": (
+                            "Association between categorical variables",
+                            "Fisher's exact test",
+                            "2 × 2 tables, especially with small counts."
+                        ),
+                    },
+                    "📉 Non-parametric": {
+                        "Mann-Whitney U": (
+                            "Compare two independent groups",
+                            "Mann-Whitney U",
+                            "Rank-based alternative to the independent t-test."
+                        ),
+                        "Kruskal-Wallis": (
+                            "Compare three or more independent groups",
+                            "Kruskal-Wallis",
+                            "Rank-based alternative to one-way ANOVA."
+                        ),
+                        "Spearman correlation": (
+                            "Relationship between two numerical variables",
+                            "Spearman correlation",
+                            "Rank-based relationship between two variables."
+                        ),
+                    },
+                }
+
+                analysis_category = st.radio(
+                    "Category",
+                    list(TEST_CATALOG),
+                    horizontal=True,
+                    key="analysis_category"
+                )
+
+                test_options = TEST_CATALOG[analysis_category]
+
+                analysis_test = st.selectbox(
+                    "Test",
+                    list(test_options),
+                    key=f"analysis_test_{analysis_category}"
+                )
+
+                analysis_design, preset_method, test_blurb = (
+                    test_options[analysis_test]
+                )
+
+                st.caption(test_blurb)
+                st.divider()
+
+
+                # ============================================================
+                # RELATIONSHIP
+                # ============================================================
+
+                if analysis_design == (
+                    "Relationship between two numerical variables"
                 ):
 
-                    if outcome == group:
+                    st.subheader("📈 Correlation Analysis")
 
-                        st.warning(
-                            "Outcome and grouping variables must be different."
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+
+                        x = st.selectbox(
+                            "First numerical variable",
+                            df.columns,
+                            key="corr_x"
                         )
 
-                    else:
+                    with col2:
 
-                        if method == "Independent samples t-test":
+                        y = st.selectbox(
+                            "Second numerical variable",
+                            df.columns,
+                            key="corr_y"
+                        )
 
-                            result = independent_t_test(
-                                df[outcome],
-                                df[group]
+                    method = preset_method or st.radio(
+                        "Method",
+                        [
+                            "Pearson correlation",
+                            "Spearman correlation"
+                        ],
+                        horizontal=True
+                    )
+
+                    if st.button(
+                        "▶ Run Correlation",
+                        key="run_correlation"
+                    ):
+
+                        if x == y:
+
+                            st.warning(
+                                "Please select two different variables."
                             )
 
-                        elif method == "Welch's t-test":
+                        elif method == "Pearson correlation":
 
-                            result = welch_t_test(
-                                df[outcome],
-                                df[group]
+                            result = pearson(
+                                df[x],
+                                df[y]
                             )
 
-                        if method in (
-                            "Independent samples t-test",
-                            "Welch's t-test"
-                        ):
+                            r = result["statistic"]
+                            p = result["p_value"]
+                            decision = p_value_decision(p)
 
-                            if result is None:
+                            st.subheader("📊 Correlation Result")
 
-                                st.error(
-                                    "The selected grouping variable must contain "
-                                "exactly two groups."
+                            col1, col2, col3 = st.columns(3)
+
+                            with col1:
+                                st.metric(
+                                    "Correlation",
+                                    f"{r:.3f}"
                                 )
+
+                            with col2:
+                                st.metric(
+                                    "p-value",
+                                    f"{p:.4f}"
+                                )
+
+                            with col3:
+                                st.metric(
+                                    "R²",
+                                    f"{correlation_r_squared(r):.3f}"
+                                )
+
+                            st.write(
+                                interpret_correlation(r)
+                            )
+
+                            st.write(
+                                interpret_r_squared(
+                                    correlation_r_squared(r)
+                                )
+                            )
+
+                            if decision["significant"]:
+                                st.success(
+                                    decision["decision"]
+                                )
+                            else:
+                                st.warning(
+                                    decision["decision"]
+                                )
+
+                            st.write(
+                                decision["explanation"]
+                            )
+
+                        else:
+
+                            result = spearman(
+                                df[x],
+                                df[y]
+                            )
+
+                            r = result["statistic"]
+                            p = result["p_value"]
+                            decision = p_value_decision(p)
+
+                            st.subheader("📊 Correlation Result")
+
+                            col1, col2, col3 = st.columns(3)
+
+                            with col1:
+                                st.metric(
+                                    "Correlation",
+                                    f"{r:.3f}"
+                                )
+
+                            with col2:
+                                st.metric(
+                                    "p-value",
+                                    f"{p:.4f}"
+                                )
+
+                            with col3:
+                                st.metric(
+                                    "R²",
+                                    f"{correlation_r_squared(r):.3f}"
+                                )
+
+                            st.write(
+                                interpret_correlation(r)
+                            )
+
+                            st.write(
+                                interpret_r_squared(
+                                    correlation_r_squared(r)
+                                )
+                            )
+
+                            if decision["significant"]:
+                                st.success(
+                                    decision["decision"]
+                                )
+                            else:
+                                st.warning(
+                                    decision["decision"]
+                                )
+
+                            st.write(
+                                decision["explanation"]
+                            )
+
+
+                # ============================================================
+                # TWO INDEPENDENT GROUPS
+                # ============================================================
+
+                elif analysis_design == (
+                    "Compare two independent groups"
+                ):
+
+                    st.subheader("⚖️ Two Independent Groups")
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+
+                        outcome = st.selectbox(
+                            "Numerical outcome",
+                            df.columns,
+                            key="two_group_outcome"
+                        )
+
+                    with col2:
+
+                        group = st.selectbox(
+                            "Grouping variable",
+                            df.columns,
+                            key="two_group_variable"
+                        )
+
+                    method = preset_method or st.selectbox(
+                        "Statistical method",
+                        [
+                            "Independent samples t-test",
+                            "Welch's t-test",
+                            "Mann-Whitney U"
+                        ],
+                        key="two_group_method"
+                    )
+
+                    if st.button(
+                        "▶ Run Two-Group Analysis",
+                        key="run_two_group"
+                    ):
+
+                        if outcome == group:
+
+                            st.warning(
+                                "Outcome and grouping variables must be different."
+                            )
+
+                        else:
+
+                            if method == "Independent samples t-test":
+
+                                result = independent_t_test(
+                                    df[outcome],
+                                    df[group]
+                                )
+
+                            elif method == "Welch's t-test":
+
+                                result = welch_t_test(
+                                    df[outcome],
+                                    df[group]
+                                )
+
+                            if method in (
+                                "Independent samples t-test",
+                                "Welch's t-test"
+                            ):
+
+                                if result is None:
+
+                                    st.error(
+                                        "The selected grouping variable must contain "
+                                    "exactly two groups."
+                                    )
+
+                                else:
+
+                                    st.success(result["test"])
+
+                                    col1, col2, col3 = st.columns(3)
+
+                                    with col1:
+                                        st.metric(
+                                            "Test statistic",
+                                            f"{result['statistic']:.4f}"
+                                        )
+
+                                    with col2:
+                                        st.metric(
+                                            "p-value",
+                                            f"{result['p_value']:.4f}"
+                                        )
+
+                                    with col3:
+                                        st.metric(
+                                            "Significance level",
+                                            "0.05"
+                                        )
+
+                                    st.info(
+                                        interpret_p_value(
+                                            result["p_value"]
+                                        )
+                                    )
+
+                                    # ============================================================
+                                    # DECISION
+                                    # ============================================================
+                                    decision = p_value_decision(
+                                        result["p_value"]
+                                    )
+
+                                    if decision["significant"]:
+                                        st.success(
+                                            f"**Decision:** {decision['decision']}"
+                                        )
+                                    else:
+                                        st.warning(
+                                            f"**Decision:** {decision['decision']}"
+                                        )
+
+                                    st.write(
+                                        decision["explanation"]
+                                    )
+
+                                    # ============================================================
+                                    # EFFECT SIZE
+                                    # ============================================================
+                                    g1 = df[
+                                        df[group] == result["group1"]
+                                    ][outcome].dropna()
+                                    g2 = df[
+                                        df[group] == result["group2"]
+                                    ][outcome].dropna()
+
+                                    d = cohens_d(
+                                        g1,
+                                        g2
+                                    )
+
+                                    st.subheader("📏 Effect Size")
+
+                                    if d is not None:
+                                        st.metric(
+                                            "Cohen's d",
+                                            f"{d:.3f}"
+                                        )
+                                        st.write(
+                                            interpret_cohens_d(d)
+                                        )
+                                        warning = practical_significance_warning(
+                                            result["p_value"],
+                                            d
+                                        )
+                                        if warning:
+                                            st.warning(warning)
+
+                                    # ============================================================
+                                    # CONFIDENCE INTERVAL
+                                    # ============================================================
+                                    ci = mean_difference_ci(
+                                        g1,
+                                        g2
+                                    )
+                                    if ci:
+                                        st.subheader("📐 95% Confidence Interval")
+                                        st.write(
+                                            f"Estimated mean difference: "
+                                        f"**{ci['difference']:.3f}**"
+                                        )
+                                        st.write(
+                                            f"95% CI: "
+                                        f"**[{ci['lower']:.3f}, "
+                                        f"{ci['upper']:.3f}]**"
+                                        )
+
+                                    # ============================================================
+                                    # RESEARCH INTERPRETATION
+                                    # ============================================================
+                                    st.subheader("📝 Research Interpretation")
+
+                                    relationship = (
+                                        f"a difference in {outcome} between "
+                                    f"{result['group1']} and {result['group2']}"
+                                    )
+
+                                    research_text = research_interpretation(
+                                        decision["significant"],
+                                        relationship
+                                    )
+
+                                    st.write(
+                                        research_text
+                                    )
+
+                                    if method == "Welch's t-test":
+
+                                        with st.expander(
+                                            "📚 Why is Welch's test being recommended?"
+                                        ):
+
+                                            explanation = explain_welch()
+
+                                            st.write(
+                                                "**What is Welch's method?**"
+                                            )
+                                            st.write(
+                                                explanation["what"]
+                                            )
+                                            st.write(
+                                                "**For two groups:**"
+                                            )
+                                            st.write(
+                                                explanation["welch_t"]
+                                            )
+                                            st.write(
+                                                "**For three or more groups:**"
+                                            )
+                                            st.write(
+                                                explanation["welch_anova"]
+                                            )
+                                            st.write(
+                                                "**Why use it?**"
+                                            )
+                                            st.write(
+                                                explanation["why"]
+                                            )
+                                            st.warning(
+                                                explanation["important"]
+                                            )
 
                             else:
 
-                                st.success(result["test"])
+                                result = mann_whitney_analysis(
+                                    df[outcome],
+                                    df[group]
+                                )
 
-                                col1, col2, col3 = st.columns(3)
+                                if result is None:
 
-                                with col1:
-                                    st.metric(
-                                        "Test statistic",
-                                        f"{result['statistic']:.4f}"
+                                    st.error(
+                                        "The grouping variable must contain exactly two groups."
                                     )
 
-                                with col2:
-                                    st.metric(
-                                        "p-value",
-                                        f"{result['p_value']:.4f}"
+                                else:
+
+                                    st.success(
+                                        "Mann-Whitney U test completed."
                                     )
 
-                                with col3:
-                                    st.metric(
-                                        "Significance level",
-                                        "0.05"
-                                    )
+                                    col1, col2 = st.columns(2)
 
-                                st.info(
-                                    interpret_p_value(
+                                    with col1:
+
+                                        st.metric(
+                                            "U statistic",
+                                            f"{result['statistic']:.3f}"
+                                        )
+
+                                    with col2:
+
+                                        st.metric(
+                                            "p-value",
+                                            f"{result['p_value']:.4f}"
+                                        )
+
+                                    decision = p_value_decision(
                                         result["p_value"]
                                     )
-                                )
 
-                                # ============================================================
-                                # DECISION
-                                # ============================================================
-                                decision = p_value_decision(
-                                    result["p_value"]
-                                )
+                                    if decision["significant"]:
 
-                                if decision["significant"]:
-                                    st.success(
-                                        f"**Decision:** {decision['decision']}"
+                                        st.success(
+                                            decision["decision"]
+                                        )
+
+                                    else:
+
+                                        st.info(
+                                            decision["decision"]
+                                        )
+
+                                    st.write(
+                                        decision["explanation"]
                                     )
+
+                                    # ========================================================
+                                    # GROUP MEDIANS
+                                    # ========================================================
+
+                                    st.subheader(
+                                        "📊 Group Summary"
+                                    )
+
+                                    col1, col2 = st.columns(2)
+
+                                    with col1:
+
+                                        st.metric(
+                                            result["group1"],
+                                            f"Median = {result['median1']:.3f}"
+                                        )
+
+                                    with col2:
+
+                                        st.metric(
+                                            result["group2"],
+                                            f"Median = {result['median2']:.3f}"
+                                        )
+
+                                    # ========================================================
+                                    # EFFECT SIZE
+                                    # ========================================================
+
+                                    r = rank_biserial_correlation(
+                                        df[outcome],
+                                        df[group]
+                                    )
+
+                                    st.subheader(
+                                        "📏 Effect Size"
+                                    )
+
+                                    if r is not None:
+
+                                        st.metric(
+                                            "Rank-biserial correlation",
+                                            f"{r:.3f}"
+                                        )
+
+                                        st.write(
+                                            interpret_rank_biserial(r)
+                                        )
+
+                                    # ========================================================
+                                    # EXPLANATION
+                                    # ========================================================
+
+                                    explanation = explain_mann_whitney()
+
+                                    with st.expander(
+                                        "📚 Why is Mann-Whitney being used?"
+                                    ):
+
+                                        st.write(
+                                            explanation["why"]
+                                        )
+
+                                        st.warning(
+                                            explanation["not_what"]
+                                        )
+
+
+                # ============================================================
+                # THREE OR MORE GROUPS
+                # ============================================================
+
+                elif analysis_design == (
+                    "Compare three or more independent groups"
+                ):
+
+                    st.subheader("📊 Multi-Group Comparison")
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+
+                        outcome = st.selectbox(
+                            "Numerical outcome",
+                            df.columns,
+                            key="multi_outcome"
+                        )
+
+                    with col2:
+
+                        group = st.selectbox(
+                            "Grouping variable",
+                            df.columns,
+                            key="multi_group"
+                        )
+
+                    method = preset_method or st.selectbox(
+                        "Statistical method",
+                        [
+                            "One-Way ANOVA",
+                            "Welch's ANOVA",
+                            "Kruskal-Wallis"
+                        ],
+                        key="multi_method"
+                    )
+
+                    if st.button(
+                        "▶ Run Multi-Group Analysis",
+                        key="run_multi_group"
+                    ):
+
+                        if outcome == group:
+
+                            st.warning(
+                                "Outcome and grouping variables must be different."
+                            )
+
+                        else:
+
+                            if method == "One-Way ANOVA":
+
+                                result = one_way_anova(
+                                    df[outcome],
+                                    df[group]
+                                )
+
+                                if result is None:
+
+                                    st.error(
+                                        "At least three independent groups are required."
+                                    )
+
                                 else:
-                                    st.warning(
-                                        f"**Decision:** {decision['decision']}"
+
+                                    st.success(
+                                        result["test"]
                                     )
 
-                                st.write(
-                                    decision["explanation"]
-                                )
+                                    col1, col2 = st.columns(2)
 
-                                # ============================================================
-                                # EFFECT SIZE
-                                # ============================================================
-                                g1 = df[
-                                    df[group] == result["group1"]
-                                ][outcome].dropna()
-                                g2 = df[
-                                    df[group] == result["group2"]
-                                ][outcome].dropna()
+                                    with col1:
 
-                                d = cohens_d(
-                                    g1,
-                                    g2
-                                )
+                                        st.metric(
+                                            "Test statistic",
+                                            f"{result['statistic']:.4f}"
+                                        )
 
-                                st.subheader("📏 Effect Size")
+                                    with col2:
 
-                                if d is not None:
-                                    st.metric(
-                                        "Cohen's d",
-                                        f"{d:.3f}"
+                                        st.metric(
+                                            "p-value",
+                                            f"{result['p_value']:.4f}"
+                                        )
+
+                                    # ========================================================
+                                    # GROUP DESCRIPTIVES
+                                    # ========================================================
+
+                                    st.subheader("📋 Group Descriptive Statistics")
+
+                                    summary = group_descriptive_summary(
+                                        df,
+                                        outcome,
+                                        group
                                     )
+
+                                    st.dataframe(
+                                        summary,
+                                        use_container_width=True
+                                    )
+
+                                    # ========================================================
+                                    # ANOVA DECISION
+                                    # ========================================================
+
+                                    guidance = anova_posthoc_guidance(
+                                        result["p_value"]
+                                    )
+
+                                    if guidance["significant"]:
+
+                                        st.success(
+                                            guidance["message"]
+                                        )
+
+                                    else:
+
+                                        st.info(
+                                            guidance["message"]
+                                        )
+
+                                    # ====================================================
+                                    # POST-HOC ANALYSIS
+                                    # ====================================================
+
+                                    if guidance["significant"]:
+
+                                        st.subheader(
+                                            "🔍 Post-Hoc Pairwise Comparisons"
+                                        )
+
+                                        st.write(
+                                            "Because the overall ANOVA is significant, "
+                                        "Statify compares the groups to determine "
+                                        "where the differences occur."
+                                        )
+
+                                        posthoc_method = st.selectbox(
+                                            "Multiple-comparison method",
+                                            [
+                                                "Tukey HSD",
+                                                "Bonferroni"
+                                            ],
+                                            key="posthoc_method"
+                                        )
+
+                                        if posthoc_method == "Tukey HSD":
+
+                                            posthoc = tukey_hsd(
+                                                df,
+                                                outcome,
+                                                group
+                                            )
+
+                                            if posthoc:
+
+                                                st.dataframe(
+                                                    posthoc["table"],
+                                                    use_container_width=True
+                                                )
+
+                                                st.subheader(
+                                                    "📝 Pairwise Interpretation"
+                                                )
+
+                                                interpretations = (
+                                                    interpret_tukey_results(
+                                                        posthoc["table"]
+                                                    )
+                                                )
+
+                                                for text in interpretations:
+
+                                                    st.write(
+                                                        "• " + text
+                                                    )
+
+                                        else:
+
+                                            posthoc = bonferroni_pairwise(
+                                                df,
+                                                outcome,
+                                                group
+                                            )
+
+                                            if posthoc:
+
+                                                st.dataframe(
+                                                    posthoc,
+                                                    use_container_width=True
+                                                )
+
+                                                st.info(
+                                                    "Bonferroni adjustment controls the "
+                                                "family-wise error rate by making the "
+                                                "pairwise significance criterion more "
+                                                "conservative."
+                                                )
+
+                            # ========================================================
+                            # WELCH'S ANOVA
+                            # ========================================================
+
+                            elif method == "Welch's ANOVA":
+
+                                result = welch_anova(
+                                    df,
+                                    outcome,
+                                    group
+                                )
+
+                                if result is None:
+
+                                    st.error(
+                                        "Welch's ANOVA requires at least three "
+                                    "independent groups."
+                                    )
+
+                                elif not result.get(
+                                    "available",
+                                    True
+                                ):
+
+                                    st.error(
+                                        result["message"]
+                                    )
+
+                                else:
+
+                                    st.success(
+                                        result["test"]
+                                    )
+
+                                    col1, col2 = st.columns(2)
+
+                                    with col1:
+
+                                        st.metric(
+                                            "Welch F statistic",
+                                            f"{result['statistic']:.3f}"
+                                        )
+
+                                    with col2:
+
+                                        st.metric(
+                                            "p-value",
+                                            f"{result['p_value']:.4f}"
+                                        )
+
                                     st.write(
-                                        interpret_cohens_d(d)
-                                    )
-                                    warning = practical_significance_warning(
-                                        result["p_value"],
-                                        d
-                                    )
-                                    if warning:
-                                        st.warning(warning)
-
-                                # ============================================================
-                                # CONFIDENCE INTERVAL
-                                # ============================================================
-                                ci = mean_difference_ci(
-                                    g1,
-                                    g2
-                                )
-                                if ci:
-                                    st.subheader("📐 95% Confidence Interval")
-                                    st.write(
-                                        f"Estimated mean difference: "
-                                    f"**{ci['difference']:.3f}**"
-                                    )
-                                    st.write(
-                                        f"95% CI: "
-                                    f"**[{ci['lower']:.3f}, "
-                                    f"{ci['upper']:.3f}]**"
+                                        welch_guidance(
+                                            result["p_value"]
+                                        )
                                     )
 
-                                # ============================================================
-                                # RESEARCH INTERPRETATION
-                                # ============================================================
-                                st.subheader("📝 Research Interpretation")
+                                    if result["p_value"] < 0.05:
 
-                                relationship = (
-                                    f"a difference in {outcome} between "
-                                f"{result['group1']} and {result['group2']}"
-                                )
+                                        st.subheader(
+                                            "🔍 Games-Howell Post-Hoc Comparisons"
+                                        )
 
-                                research_text = research_interpretation(
-                                    decision["significant"],
-                                    relationship
-                                )
+                                        st.write(
+                                            "Because Welch's ANOVA is significant, "
+                                        "Statify examines which group means differ "
+                                        "using Games-Howell pairwise comparisons."
+                                        )
 
-                                st.write(
-                                    research_text
-                                )
+                                        gh = games_howell_posthoc(
+                                            df,
+                                            outcome,
+                                            group
+                                        )
 
-                                if method == "Welch's t-test":
+                                        st.dataframe(
+                                            gh,
+                                            use_container_width=True
+                                        )
 
                                     with st.expander(
                                         "📚 Why is Welch's test being recommended?"
@@ -3147,1030 +3706,557 @@ else:
                                             explanation["important"]
                                         )
 
-                        else:
-
-                            result = mann_whitney_analysis(
-                                df[outcome],
-                                df[group]
-                            )
-
-                            if result is None:
-
-                                st.error(
-                                    "The grouping variable must contain exactly two groups."
-                                )
+                            # ========================================================
+                            # KRUSKAL-WALLIS
+                            # ========================================================
 
                             else:
 
-                                st.success(
-                                    "Mann-Whitney U test completed."
-                                )
-
-                                col1, col2 = st.columns(2)
-
-                                with col1:
-
-                                    st.metric(
-                                        "U statistic",
-                                        f"{result['statistic']:.3f}"
-                                    )
-
-                                with col2:
-
-                                    st.metric(
-                                        "p-value",
-                                        f"{result['p_value']:.4f}"
-                                    )
-
-                                decision = p_value_decision(
-                                    result["p_value"]
-                                )
-
-                                if decision["significant"]:
-
-                                    st.success(
-                                        decision["decision"]
-                                    )
-
-                                else:
-
-                                    st.info(
-                                        decision["decision"]
-                                    )
-
-                                st.write(
-                                    decision["explanation"]
-                                )
-
-                                # ========================================================
-                                # GROUP MEDIANS
-                                # ========================================================
-
-                                st.subheader(
-                                    "📊 Group Summary"
-                                )
-
-                                col1, col2 = st.columns(2)
-
-                                with col1:
-
-                                    st.metric(
-                                        result["group1"],
-                                        f"Median = {result['median1']:.3f}"
-                                    )
-
-                                with col2:
-
-                                    st.metric(
-                                        result["group2"],
-                                        f"Median = {result['median2']:.3f}"
-                                    )
-
-                                # ========================================================
-                                # EFFECT SIZE
-                                # ========================================================
-
-                                r = rank_biserial_correlation(
+                                result = kruskal_analysis(
                                     df[outcome],
                                     df[group]
                                 )
 
-                                st.subheader(
-                                    "📏 Effect Size"
+                                if result is None:
+
+                                    st.error(
+                                        "At least three independent groups are required."
+                                    )
+
+                                else:
+
+                                    st.success(
+                                        "Kruskal-Wallis H test completed."
+                                    )
+
+                                    col1, col2 = st.columns(2)
+
+                                    with col1:
+
+                                        st.metric(
+                                            "H statistic",
+                                            f"{result['statistic']:.3f}"
+                                        )
+
+                                    with col2:
+
+                                        st.metric(
+                                            "p-value",
+                                            f"{result['p_value']:.4f}"
+                                        )
+
+                                    decision = p_value_decision(
+                                        result["p_value"]
+                                    )
+
+                                    if decision["significant"]:
+
+                                        st.success(
+                                            decision["decision"]
+                                        )
+
+                                        st.write(
+                                            "The result indicates that at least one "
+                                        "group distribution differs from another."
+                                        )
+
+                                        st.subheader(
+                                            "🔍 Dunn's Post-Hoc Test"
+                                        )
+
+                                        correction = st.selectbox(
+                                            "Multiple-comparison correction",
+                                            [
+                                                "bonferroni",
+                                                "holm",
+                                                "fdr_bh"
+                                            ],
+                                            key="dunn_correction"
+                                        )
+
+                                        if st.button(
+                                            "Run Dunn's Post-Hoc",
+                                            key="run_dunn"
+                                        ):
+
+                                            dunn = dunn_posthoc(
+                                                df,
+                                                outcome,
+                                                group,
+                                                correction
+                                            )
+
+                                            st.dataframe(
+                                                dunn,
+                                                use_container_width=True
+                                            )
+
+                                            st.write(
+                                                "The table contains adjusted pairwise "
+                                            "p-values. Small adjusted p-values indicate "
+                                            "evidence of a difference between the "
+                                            "corresponding groups."
+                                            )
+
+                                    else:
+
+                                        st.info(
+                                            decision["explanation"]
+                                        )
+
+                                    with st.expander(
+                                        "📚 Why use Kruskal-Wallis instead of One-Way ANOVA?"
+                                    ):
+
+                                        explanation = explain_kruskal()
+
+                                        st.write(
+                                            explanation["what"]
+                                        )
+
+                                        st.write(
+                                            explanation["why"]
+                                        )
+
+                                        st.warning(
+                                            explanation["important"]
+                                        )
+
+
+                # ============================================================
+                # PAIRED DATA
+                # ============================================================
+
+                elif analysis_design == (
+                    "Compare paired measurements"
+                ):
+
+                    st.subheader("🔗 Paired Measurements")
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+
+                        before = st.selectbox(
+                            "Measurement 1",
+                            df.columns,
+                            key="paired_before"
+                        )
+
+                    with col2:
+
+                        after = st.selectbox(
+                            "Measurement 2",
+                            df.columns,
+                            key="paired_after"
+                        )
+
+                    if st.button(
+                        "▶ Run Paired t-test",
+                        key="run_paired"
+                    ):
+
+                        if before == after:
+
+                            st.warning(
+                                "Please select two different measurements."
+                            )
+
+                        else:
+
+                            result = paired_t_test(
+                                df[before],
+                                df[after]
+                            )
+
+                            st.metric(
+                                "t-statistic",
+                                f"{result['statistic']:.4f}"
+                            )
+
+                            st.metric(
+                                "p-value",
+                                f"{result['p_value']:.4f}"
+                            )
+
+                            st.metric(
+                                "Mean difference",
+                                f"{result['mean_difference']:.4f}"
+                            )
+
+                            st.info(
+                                interpret_p_value(
+                                    result["p_value"]
                                 )
-
-                                if r is not None:
-
-                                    st.metric(
-                                        "Rank-biserial correlation",
-                                        f"{r:.3f}"
-                                    )
-
-                                    st.write(
-                                        interpret_rank_biserial(r)
-                                    )
-
-                                # ========================================================
-                                # EXPLANATION
-                                # ========================================================
-
-                                explanation = explain_mann_whitney()
-
-                                with st.expander(
-                                    "📚 Why is Mann-Whitney being used?"
-                                ):
-
-                                    st.write(
-                                        explanation["why"]
-                                    )
-
-                                    st.warning(
-                                        explanation["not_what"]
-                                    )
+                            )
 
 
-            # ============================================================
-            # THREE OR MORE GROUPS
-            # ============================================================
+                # ============================================================
+                # TWO-WAY ANOVA
+                # ============================================================
 
-            elif analysis_design == (
-                "Compare three or more independent groups"
-            ):
+                elif analysis_design == (
+                    "Two-Way ANOVA"
+                ):
 
-                st.subheader("📊 Multi-Group Comparison")
+                    st.subheader("🧩 Two-Way ANOVA")
 
-                col1, col2 = st.columns(2)
-
-                with col1:
+                    st.write(
+                        "Two-way ANOVA evaluates the effects of two categorical "
+                    "factors on one numerical outcome, including their "
+                    "interaction."
+                    )
 
                     outcome = st.selectbox(
                         "Numerical outcome",
                         df.columns,
-                        key="multi_outcome"
+                        key="two_way_outcome"
                     )
 
-                with col2:
-
-                    group = st.selectbox(
-                        "Grouping variable",
+                    factor_a = st.selectbox(
+                        "Factor 1",
                         df.columns,
-                        key="multi_group"
+                        key="two_way_factor1"
                     )
 
-                method = st.selectbox(
-                    "Statistical method",
-                    [
-                        "One-Way ANOVA",
-                        "Welch's ANOVA",
-                        "Kruskal-Wallis"
-                    ],
-                    key="multi_method"
-                )
-
-                if st.button(
-                    "▶ Run Multi-Group Analysis",
-                    key="run_multi_group"
-                ):
-
-                    if outcome == group:
-
-                        st.warning(
-                            "Outcome and grouping variables must be different."
-                        )
-
-                    else:
-
-                        if method == "One-Way ANOVA":
-
-                            result = one_way_anova(
-                                df[outcome],
-                                df[group]
-                            )
-
-                            if result is None:
-
-                                st.error(
-                                    "At least three independent groups are required."
-                                )
-
-                            else:
-
-                                st.success(
-                                    result["test"]
-                                )
-
-                                col1, col2 = st.columns(2)
-
-                                with col1:
-
-                                    st.metric(
-                                        "Test statistic",
-                                        f"{result['statistic']:.4f}"
-                                    )
-
-                                with col2:
-
-                                    st.metric(
-                                        "p-value",
-                                        f"{result['p_value']:.4f}"
-                                    )
-
-                                # ========================================================
-                                # GROUP DESCRIPTIVES
-                                # ========================================================
-
-                                st.subheader("📋 Group Descriptive Statistics")
-
-                                summary = group_descriptive_summary(
-                                    df,
-                                    outcome,
-                                    group
-                                )
-
-                                st.dataframe(
-                                    summary,
-                                    use_container_width=True
-                                )
-
-                                # ========================================================
-                                # ANOVA DECISION
-                                # ========================================================
-
-                                guidance = anova_posthoc_guidance(
-                                    result["p_value"]
-                                )
-
-                                if guidance["significant"]:
-
-                                    st.success(
-                                        guidance["message"]
-                                    )
-
-                                else:
-
-                                    st.info(
-                                        guidance["message"]
-                                    )
-
-                                # ====================================================
-                                # POST-HOC ANALYSIS
-                                # ====================================================
-
-                                if guidance["significant"]:
-
-                                    st.subheader(
-                                        "🔍 Post-Hoc Pairwise Comparisons"
-                                    )
-
-                                    st.write(
-                                        "Because the overall ANOVA is significant, "
-                                    "Statify compares the groups to determine "
-                                    "where the differences occur."
-                                    )
-
-                                    posthoc_method = st.selectbox(
-                                        "Multiple-comparison method",
-                                        [
-                                            "Tukey HSD",
-                                            "Bonferroni"
-                                        ],
-                                        key="posthoc_method"
-                                    )
-
-                                    if posthoc_method == "Tukey HSD":
-
-                                        posthoc = tukey_hsd(
-                                            df,
-                                            outcome,
-                                            group
-                                        )
-
-                                        if posthoc:
-
-                                            st.dataframe(
-                                                posthoc["table"],
-                                                use_container_width=True
-                                            )
-
-                                            st.subheader(
-                                                "📝 Pairwise Interpretation"
-                                            )
-
-                                            interpretations = (
-                                                interpret_tukey_results(
-                                                    posthoc["table"]
-                                                )
-                                            )
-
-                                            for text in interpretations:
-
-                                                st.write(
-                                                    "• " + text
-                                                )
-
-                                    else:
-
-                                        posthoc = bonferroni_pairwise(
-                                            df,
-                                            outcome,
-                                            group
-                                        )
-
-                                        if posthoc:
-
-                                            st.dataframe(
-                                                posthoc,
-                                                use_container_width=True
-                                            )
-
-                                            st.info(
-                                                "Bonferroni adjustment controls the "
-                                            "family-wise error rate by making the "
-                                            "pairwise significance criterion more "
-                                            "conservative."
-                                            )
-
-                        # ========================================================
-                        # WELCH'S ANOVA
-                        # ========================================================
-
-                        elif method == "Welch's ANOVA":
-
-                            result = welch_anova(
-                                df,
-                                outcome,
-                                group
-                            )
-
-                            if result is None:
-
-                                st.error(
-                                    "Welch's ANOVA requires at least three "
-                                "independent groups."
-                                )
-
-                            elif not result.get(
-                                "available",
-                                True
-                            ):
-
-                                st.error(
-                                    result["message"]
-                                )
-
-                            else:
-
-                                st.success(
-                                    result["test"]
-                                )
-
-                                col1, col2 = st.columns(2)
-
-                                with col1:
-
-                                    st.metric(
-                                        "Welch F statistic",
-                                        f"{result['statistic']:.3f}"
-                                    )
-
-                                with col2:
-
-                                    st.metric(
-                                        "p-value",
-                                        f"{result['p_value']:.4f}"
-                                    )
-
-                                st.write(
-                                    welch_guidance(
-                                        result["p_value"]
-                                    )
-                                )
-
-                                if result["p_value"] < 0.05:
-
-                                    st.subheader(
-                                        "🔍 Games-Howell Post-Hoc Comparisons"
-                                    )
-
-                                    st.write(
-                                        "Because Welch's ANOVA is significant, "
-                                    "Statify examines which group means differ "
-                                    "using Games-Howell pairwise comparisons."
-                                    )
-
-                                    gh = games_howell_posthoc(
-                                        df,
-                                        outcome,
-                                        group
-                                    )
-
-                                    st.dataframe(
-                                        gh,
-                                        use_container_width=True
-                                    )
-
-                                with st.expander(
-                                    "📚 Why is Welch's test being recommended?"
-                                ):
-
-                                    explanation = explain_welch()
-
-                                    st.write(
-                                        "**What is Welch's method?**"
-                                    )
-                                    st.write(
-                                        explanation["what"]
-                                    )
-                                    st.write(
-                                        "**For two groups:**"
-                                    )
-                                    st.write(
-                                        explanation["welch_t"]
-                                    )
-                                    st.write(
-                                        "**For three or more groups:**"
-                                    )
-                                    st.write(
-                                        explanation["welch_anova"]
-                                    )
-                                    st.write(
-                                        "**Why use it?**"
-                                    )
-                                    st.write(
-                                        explanation["why"]
-                                    )
-                                    st.warning(
-                                        explanation["important"]
-                                    )
-
-                        # ========================================================
-                        # KRUSKAL-WALLIS
-                        # ========================================================
-
-                        else:
-
-                            result = kruskal_analysis(
-                                df[outcome],
-                                df[group]
-                            )
-
-                            if result is None:
-
-                                st.error(
-                                    "At least three independent groups are required."
-                                )
-
-                            else:
-
-                                st.success(
-                                    "Kruskal-Wallis H test completed."
-                                )
-
-                                col1, col2 = st.columns(2)
-
-                                with col1:
-
-                                    st.metric(
-                                        "H statistic",
-                                        f"{result['statistic']:.3f}"
-                                    )
-
-                                with col2:
-
-                                    st.metric(
-                                        "p-value",
-                                        f"{result['p_value']:.4f}"
-                                    )
-
-                                decision = p_value_decision(
-                                    result["p_value"]
-                                )
-
-                                if decision["significant"]:
-
-                                    st.success(
-                                        decision["decision"]
-                                    )
-
-                                    st.write(
-                                        "The result indicates that at least one "
-                                    "group distribution differs from another."
-                                    )
-
-                                    st.subheader(
-                                        "🔍 Dunn's Post-Hoc Test"
-                                    )
-
-                                    correction = st.selectbox(
-                                        "Multiple-comparison correction",
-                                        [
-                                            "bonferroni",
-                                            "holm",
-                                            "fdr_bh"
-                                        ],
-                                        key="dunn_correction"
-                                    )
-
-                                    if st.button(
-                                        "Run Dunn's Post-Hoc",
-                                        key="run_dunn"
-                                    ):
-
-                                        dunn = dunn_posthoc(
-                                            df,
-                                            outcome,
-                                            group,
-                                            correction
-                                        )
-
-                                        st.dataframe(
-                                            dunn,
-                                            use_container_width=True
-                                        )
-
-                                        st.write(
-                                            "The table contains adjusted pairwise "
-                                        "p-values. Small adjusted p-values indicate "
-                                        "evidence of a difference between the "
-                                        "corresponding groups."
-                                        )
-
-                                else:
-
-                                    st.info(
-                                        decision["explanation"]
-                                    )
-
-                                with st.expander(
-                                    "📚 Why use Kruskal-Wallis instead of One-Way ANOVA?"
-                                ):
-
-                                    explanation = explain_kruskal()
-
-                                    st.write(
-                                        explanation["what"]
-                                    )
-
-                                    st.write(
-                                        explanation["why"]
-                                    )
-
-                                    st.warning(
-                                        explanation["important"]
-                                    )
-
-
-            # ============================================================
-            # PAIRED DATA
-            # ============================================================
-
-            elif analysis_design == (
-                "Compare paired measurements"
-            ):
-
-                st.subheader("🔗 Paired Measurements")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-
-                    before = st.selectbox(
-                        "Measurement 1",
+                    factor_b = st.selectbox(
+                        "Factor 2",
                         df.columns,
-                        key="paired_before"
+                        key="two_way_factor2"
                     )
 
-                with col2:
+                    if st.button(
+                        "▶ Run Two-Way ANOVA",
+                        key="run_two_way"
+                    ):
 
-                    after = st.selectbox(
-                        "Measurement 2",
-                        df.columns,
-                        key="paired_after"
-                    )
-
-                if st.button(
-                    "▶ Run Paired t-test",
-                    key="run_paired"
-                ):
-
-                    if before == after:
-
-                        st.warning(
-                            "Please select two different measurements."
-                        )
-
-                    else:
-
-                        result = paired_t_test(
-                            df[before],
-                            df[after]
-                        )
-
-                        st.metric(
-                            "t-statistic",
-                            f"{result['statistic']:.4f}"
-                        )
-
-                        st.metric(
-                            "p-value",
-                            f"{result['p_value']:.4f}"
-                        )
-
-                        st.metric(
-                            "Mean difference",
-                            f"{result['mean_difference']:.4f}"
-                        )
-
-                        st.info(
-                            interpret_p_value(
-                                result["p_value"]
-                            )
-                        )
-
-
-            # ============================================================
-            # TWO-WAY ANOVA
-            # ============================================================
-
-            elif analysis_design == (
-                "Two-Way ANOVA"
-            ):
-
-                st.subheader("🧩 Two-Way ANOVA")
-
-                st.write(
-                    "Two-way ANOVA evaluates the effects of two categorical "
-                "factors on one numerical outcome, including their "
-                "interaction."
-                )
-
-                outcome = st.selectbox(
-                    "Numerical outcome",
-                    df.columns,
-                    key="two_way_outcome"
-                )
-
-                factor_a = st.selectbox(
-                    "Factor 1",
-                    df.columns,
-                    key="two_way_factor1"
-                )
-
-                factor_b = st.selectbox(
-                    "Factor 2",
-                    df.columns,
-                    key="two_way_factor2"
-                )
-
-                if st.button(
-                    "▶ Run Two-Way ANOVA",
-                    key="run_two_way"
-                ):
-
-                    if len({
-                        outcome,
-                        factor_a,
-                        factor_b
-                    }) < 3:
-
-                        st.warning(
-                            "Outcome, Factor 1 and Factor 2 must all be different."
-                        )
-
-                    else:
-
-                        result = two_way_anova(
-                            df,
+                        if len({
                             outcome,
                             factor_a,
                             factor_b
-                        )
+                        }) < 3:
 
-                        if result is None:
-
-                            st.error(
-                                "Two-way ANOVA could not be performed."
-                            )
-
-                        elif "error" in result:
-
-                            st.error(
-                                result["error"]
+                            st.warning(
+                                "Outcome, Factor 1 and Factor 2 must all be different."
                             )
 
                         else:
 
-                            st.success(
-                                "Two-way ANOVA completed."
-                            )
-
-                            table = result["anova_table"]
-
-                            st.dataframe(
-                                table,
-                                use_container_width=True
-                            )
-
-                            st.info(
-                                "The C(Factor1):C(Factor2) row represents "
-                            "the interaction between the two factors."
-                            )
-
-                            st.subheader(
-                                "🧠 Statistical Interpretation"
-                            )
-
-                            # ------------------------------------------------
-                            # Find effects
-                            # ------------------------------------------------
-
-                            effect_sizes = (
-                                partial_eta_squared(
-                                    table
-                                )
-                            )
-
-                            interaction_name = (
-                                f'C(Q("{factor_a}")):'
-                            f'C(Q("{factor_b}"))'
-                            )
-
-                            factor_a_name = (
-                                f'C(Q("{factor_a}"))'
-                            )
-
-                            factor_b_name = (
-                                f'C(Q("{factor_b}"))'
-                            )
-
-                            # ------------------------------------------------
-                            # FACTOR A
-                            # ------------------------------------------------
-
-                            if factor_a_name in table.index:
-
-                                p_a = table.loc[
-                                    factor_a_name,
-                                    "PR(>F)"
-                                ]
-
-                                st.markdown(
-                                    f"### 1️⃣ Effect of {factor_a}"
-                                )
-
-                                st.write(
-                                    main_effect_interpretation(
-                                        p_a,
-                                        factor_a
-                                    )
-                                )
-
-                                eta_a = effect_sizes.get(
-                                    factor_a_name
-                                )
-
-                                if eta_a is not None:
-
-                                    st.write(
-                                        interpret_partial_eta_squared(
-                                            eta_a
-                                        )
-                                    )
-
-                            # ------------------------------------------------
-                            # FACTOR B
-                            # ------------------------------------------------
-
-                            if factor_b_name in table.index:
-
-                                p_b = table.loc[
-                                    factor_b_name,
-                                    "PR(>F)"
-                                ]
-
-                                st.markdown(
-                                    f"### 2️⃣ Effect of {factor_b}"
-                                )
-
-                                st.write(
-                                    main_effect_interpretation(
-                                        p_b,
-                                        factor_b
-                                    )
-                                )
-
-                                eta_b = effect_sizes.get(
-                                    factor_b_name
-                                )
-
-                                if eta_b is not None:
-
-                                    st.write(
-                                        interpret_partial_eta_squared(
-                                            eta_b
-                                        )
-                                    )
-
-                            # ------------------------------------------------
-                            # INTERACTION
-                            # ------------------------------------------------
-
-                            if interaction_name in table.index:
-
-                                p_interaction = table.loc[
-                                    interaction_name,
-                                    "PR(>F)"
-                                ]
-
-                                st.markdown(
-                                    "### 3️⃣ Interaction"
-                                )
-
-                                st.write(
-                                    interaction_interpretation(
-                                        p_interaction,
-                                        factor_a,
-                                        factor_b
-                                    )
-                                )
-
-                                eta_interaction = (
-                                    effect_sizes.get(
-                                        interaction_name
-                                    )
-                                )
-
-                                if eta_interaction is not None:
-
-                                    st.write(
-                                        interpret_partial_eta_squared(
-                                            eta_interaction
-                                        )
-                                    )
-
-                                if p_interaction < 0.05:
-
-                                    st.warning(
-                                        "⚠️ Significant interaction detected. "
-                                    "The effect of one factor depends on the level of "
-                                    "the other factor. Interpret the main effects "
-                                    "cautiously and examine the interaction plot and "
-                                    "simple effects before drawing substantive conclusions."
-                                    )
-
-                            # ------------------------------------------------
-                            # GROUP COMBINATION SUMMARY
-                            # ------------------------------------------------
-
-                            st.subheader(
-                                "📋 Group Combination Summary"
-                            )
-
-                            means = cell_means(
+                            result = two_way_anova(
                                 df,
                                 outcome,
                                 factor_a,
                                 factor_b
                             )
 
-                            st.dataframe(
-                                means,
-                                use_container_width=True
-                            )
+                            if result is None:
 
-                            # ------------------------------------------------
-                            # INTERACTION PLOT
-                            # ------------------------------------------------
-
-                            st.subheader(
-                                "📈 Interaction Plot"
-                            )
-
-                            import plotly.express as px
-
-                            fig = px.line(
-                                means,
-                                x=factor_a,
-                                y="Mean",
-                                color=factor_b,
-                                markers=True,
-                                title=(
-                                    f"Interaction between "
-                                f"{factor_a} and {factor_b}"
+                                st.error(
+                                    "Two-way ANOVA could not be performed."
                                 )
-                            )
 
-                            fig.update_layout(
-                                xaxis_title=factor_a,
-                                yaxis_title=f"Mean {outcome}",
-                                legend_title=factor_b
-                            )
+                            elif "error" in result:
 
-                            st.plotly_chart(
-                                fig,
-                                use_container_width=True
-                            )
-
-                            # ------------------------------------------------
-                            # EXPLANATION
-                            # ------------------------------------------------
-
-                            with st.expander(
-                                "📚 What does Two-Way ANOVA actually test?"
-                            ):
-                                st.write(
-                                    f"Two-Way ANOVA examines whether "
-                                f"{factor_a} is associated with differences "
-                                f"in {outcome}, whether {factor_b} is "
-                                f"associated with differences in {outcome}, "
-                                f"and whether the effect of one factor "
-                                f"depends on the level of the other factor."
+                                st.error(
+                                    result["error"]
                                 )
-                                st.write(
-                                    "The interaction term is especially important. "
-                                "A significant interaction means that the "
-                                "effect of one factor is not constant across "
-                                "the levels of the other factor."
+
+                            else:
+
+                                st.success(
+                                    "Two-way ANOVA completed."
                                 )
+
+                                table = result["anova_table"]
+
+                                st.dataframe(
+                                    table,
+                                    use_container_width=True
+                                )
+
                                 st.info(
-                                    "Remember: statistical significance does "
-                                "not automatically imply practical importance. "
-                                "Statify therefore reports effect sizes "
-                                "alongside p-values."
+                                    "The C(Factor1):C(Factor2) row represents "
+                                "the interaction between the two factors."
                                 )
 
+                                st.subheader(
+                                    "🧠 Statistical Interpretation"
+                                )
 
-            # ============================================================
-            # CATEGORICAL ASSOCIATION
-            # ============================================================
+                                # ------------------------------------------------
+                                # Find effects
+                                # ------------------------------------------------
 
-            elif analysis_design == (
-                "Association between categorical variables"
-            ):
+                                effect_sizes = (
+                                    partial_eta_squared(
+                                        table
+                                    )
+                                )
 
-                st.subheader("🔗 Categorical Association")
+                                interaction_name = (
+                                    f'C(Q("{factor_a}")):'
+                                f'C(Q("{factor_b}"))'
+                                )
 
-                col1, col2 = st.columns(2)
+                                factor_a_name = (
+                                    f'C(Q("{factor_a}"))'
+                                )
 
-                with col1:
+                                factor_b_name = (
+                                    f'C(Q("{factor_b}"))'
+                                )
 
-                    variable1 = st.selectbox(
-                        "Categorical variable 1",
-                        df.columns,
-                        key="cat_variable1"
-                    )
+                                # ------------------------------------------------
+                                # FACTOR A
+                                # ------------------------------------------------
 
-                with col2:
+                                if factor_a_name in table.index:
 
-                    variable2 = st.selectbox(
-                        "Categorical variable 2",
-                        df.columns,
-                        key="cat_variable2"
-                    )
+                                    p_a = table.loc[
+                                        factor_a_name,
+                                        "PR(>F)"
+                                    ]
 
-                method = st.selectbox(
-                    "Statistical method",
-                    [
-                        "Chi-square test",
-                        "Fisher's exact test"
-                    ],
-                    key="cat_method"
-                )
+                                    st.markdown(
+                                        f"### 1️⃣ Effect of {factor_a}"
+                                    )
 
-                if st.button(
-                    "▶ Run Categorical Analysis",
-                    key="run_categorical"
+                                    st.write(
+                                        main_effect_interpretation(
+                                            p_a,
+                                            factor_a
+                                        )
+                                    )
+
+                                    eta_a = effect_sizes.get(
+                                        factor_a_name
+                                    )
+
+                                    if eta_a is not None:
+
+                                        st.write(
+                                            interpret_partial_eta_squared(
+                                                eta_a
+                                            )
+                                        )
+
+                                # ------------------------------------------------
+                                # FACTOR B
+                                # ------------------------------------------------
+
+                                if factor_b_name in table.index:
+
+                                    p_b = table.loc[
+                                        factor_b_name,
+                                        "PR(>F)"
+                                    ]
+
+                                    st.markdown(
+                                        f"### 2️⃣ Effect of {factor_b}"
+                                    )
+
+                                    st.write(
+                                        main_effect_interpretation(
+                                            p_b,
+                                            factor_b
+                                        )
+                                    )
+
+                                    eta_b = effect_sizes.get(
+                                        factor_b_name
+                                    )
+
+                                    if eta_b is not None:
+
+                                        st.write(
+                                            interpret_partial_eta_squared(
+                                                eta_b
+                                            )
+                                        )
+
+                                # ------------------------------------------------
+                                # INTERACTION
+                                # ------------------------------------------------
+
+                                if interaction_name in table.index:
+
+                                    p_interaction = table.loc[
+                                        interaction_name,
+                                        "PR(>F)"
+                                    ]
+
+                                    st.markdown(
+                                        "### 3️⃣ Interaction"
+                                    )
+
+                                    st.write(
+                                        interaction_interpretation(
+                                            p_interaction,
+                                            factor_a,
+                                            factor_b
+                                        )
+                                    )
+
+                                    eta_interaction = (
+                                        effect_sizes.get(
+                                            interaction_name
+                                        )
+                                    )
+
+                                    if eta_interaction is not None:
+
+                                        st.write(
+                                            interpret_partial_eta_squared(
+                                                eta_interaction
+                                            )
+                                        )
+
+                                    if p_interaction < 0.05:
+
+                                        st.warning(
+                                            "⚠️ Significant interaction detected. "
+                                        "The effect of one factor depends on the level of "
+                                        "the other factor. Interpret the main effects "
+                                        "cautiously and examine the interaction plot and "
+                                        "simple effects before drawing substantive conclusions."
+                                        )
+
+                                # ------------------------------------------------
+                                # GROUP COMBINATION SUMMARY
+                                # ------------------------------------------------
+
+                                st.subheader(
+                                    "📋 Group Combination Summary"
+                                )
+
+                                means = cell_means(
+                                    df,
+                                    outcome,
+                                    factor_a,
+                                    factor_b
+                                )
+
+                                st.dataframe(
+                                    means,
+                                    use_container_width=True
+                                )
+
+                                # ------------------------------------------------
+                                # INTERACTION PLOT
+                                # ------------------------------------------------
+
+                                st.subheader(
+                                    "📈 Interaction Plot"
+                                )
+
+                                import plotly.express as px
+
+                                fig = px.line(
+                                    means,
+                                    x=factor_a,
+                                    y="Mean",
+                                    color=factor_b,
+                                    markers=True,
+                                    title=(
+                                        f"Interaction between "
+                                    f"{factor_a} and {factor_b}"
+                                    )
+                                )
+
+                                fig.update_layout(
+                                    xaxis_title=factor_a,
+                                    yaxis_title=f"Mean {outcome}",
+                                    legend_title=factor_b
+                                )
+
+                                st.plotly_chart(
+                                    fig,
+                                    use_container_width=True
+                                )
+
+                                # ------------------------------------------------
+                                # EXPLANATION
+                                # ------------------------------------------------
+
+                                with st.expander(
+                                    "📚 What does Two-Way ANOVA actually test?"
+                                ):
+                                    st.write(
+                                        f"Two-Way ANOVA examines whether "
+                                    f"{factor_a} is associated with differences "
+                                    f"in {outcome}, whether {factor_b} is "
+                                    f"associated with differences in {outcome}, "
+                                    f"and whether the effect of one factor "
+                                    f"depends on the level of the other factor."
+                                    )
+                                    st.write(
+                                        "The interaction term is especially important. "
+                                    "A significant interaction means that the "
+                                    "effect of one factor is not constant across "
+                                    "the levels of the other factor."
+                                    )
+                                    st.info(
+                                        "Remember: statistical significance does "
+                                    "not automatically imply practical importance. "
+                                    "Statify therefore reports effect sizes "
+                                    "alongside p-values."
+                                    )
+
+
+                # ============================================================
+                # CATEGORICAL ASSOCIATION
+                # ============================================================
+
+                elif analysis_design == (
+                    "Association between categorical variables"
                 ):
 
-                    if variable1 == variable2:
+                    st.subheader("🔗 Categorical Association")
 
-                        st.warning(
-                            "Please select two different variables."
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+
+                        variable1 = st.selectbox(
+                            "Categorical variable 1",
+                            df.columns,
+                            key="cat_variable1"
                         )
 
-                    elif method == "Chi-square test":
+                    with col2:
 
-                        result = chi_square(
-                            df[variable1],
-                            df[variable2]
+                        variable2 = st.selectbox(
+                            "Categorical variable 2",
+                            df.columns,
+                            key="cat_variable2"
                         )
 
-                        st.dataframe(
-                            result["table"],
-                            use_container_width=True
-                        )
+                    method = preset_method or st.selectbox(
+                        "Statistical method",
+                        [
+                            "Chi-square test",
+                            "Fisher's exact test"
+                        ],
+                        key="cat_method"
+                    )
 
-                        st.metric(
-                            "Chi-square",
-                            f"{result['statistic']:.4f}"
-                        )
+                    if st.button(
+                        "▶ Run Categorical Analysis",
+                        key="run_categorical"
+                    ):
 
-                        st.metric(
-                            "p-value",
-                            f"{result['p_value']:.4f}"
-                        )
+                        if variable1 == variable2:
 
-                        st.info(
-                            interpret_p_value(
-                                result["p_value"]
-                            )
-                        )
-
-                    else:
-
-                        result = fisher_exact(
-                            df[variable1],
-                            df[variable2]
-                        )
-
-                        if result is None:
-
-                            st.error(
-                                "Fisher's exact test currently requires "
-                            "a 2 × 2 contingency table."
+                            st.warning(
+                                "Please select two different variables."
                             )
 
-                        else:
+                        elif method == "Chi-square test":
+
+                            result = chi_square(
+                                df[variable1],
+                                df[variable2]
+                            )
 
                             st.dataframe(
                                 result["table"],
@@ -4178,8 +4264,8 @@ else:
                             )
 
                             st.metric(
-                                "Odds ratio",
-                                f"{result['odds_ratio']:.4f}"
+                                "Chi-square",
+                                f"{result['statistic']:.4f}"
                             )
 
                             st.metric(
@@ -4193,77 +4279,379 @@ else:
                                 )
                             )
 
-            # ============================================================
-            # NON-PARAMETRIC ANALYSIS GUIDE
-            # ============================================================
-            st.divider()
-            st.header("📉 Non-Parametric Analysis Guide")
-            st.write(
-                "Statify explains why a rank-based method may be appropriate "
-            "instead of simply giving the test name."
-            )
-            nonparametric_test = st.selectbox(
-                "Choose a non-parametric method",
-                [
-                    "Mann-Whitney U",
-                    "Wilcoxon signed-rank",
-                    "Kruskal-Wallis"
-                ],
-                key="nonparametric_guide"
-            )
-            if nonparametric_test == "Mann-Whitney U":
-                explanation = explain_mann_whitney()
-                st.subheader("What is it?")
+                        else:
+
+                            result = fisher_exact(
+                                df[variable1],
+                                df[variable2]
+                            )
+
+                            if result is None:
+
+                                st.error(
+                                    "Fisher's exact test currently requires "
+                                "a 2 × 2 contingency table."
+                                )
+
+                            else:
+
+                                st.dataframe(
+                                    result["table"],
+                                    use_container_width=True
+                                )
+
+                                st.metric(
+                                    "Odds ratio",
+                                    f"{result['odds_ratio']:.4f}"
+                                )
+
+                                st.metric(
+                                    "p-value",
+                                    f"{result['p_value']:.4f}"
+                                )
+
+                                st.info(
+                                    interpret_p_value(
+                                        result["p_value"]
+                                    )
+                                )
+
+
+                # ============================================================
+                # LINEAR REGRESSION
+                # ============================================================
+
+                elif analysis_design == "Linear regression":
+
+                    st.subheader("📈 Multiple Linear Regression")
+
+                    st.write(
+                        "Models how a numerical outcome changes with one or "
+                        "more predictors. Predictors can be numerical or "
+                        "categorical."
+                    )
+
+                    if not numeric_columns:
+
+                        st.warning(
+                            "This dataset has no numerical variable to use "
+                            "as an outcome."
+                        )
+
+                    else:
+
+                        lin_outcome = st.selectbox(
+                            "Numerical outcome (Y)",
+                            numeric_columns,
+                            key="linreg_outcome"
+                        )
+
+                        lin_predictors = st.multiselect(
+                            "Predictors (X)",
+                            [c for c in df.columns if c != lin_outcome],
+                            key=f"linreg_predictors_{lin_outcome}"
+                        )
+
+                        if st.button(
+                            "▶ Run Linear Regression",
+                            key="run_linreg"
+                        ):
+
+                            result = linear_regression(
+                                df,
+                                lin_outcome,
+                                lin_predictors
+                            )
+
+                            if "error" in result:
+
+                                st.error(result["error"])
+
+                            else:
+
+                                m1, m2, m3, m4 = st.columns(4)
+
+                                m1.metric("R²", f"{result['r_squared']:.3f}")
+                                m2.metric(
+                                    "Adjusted R²",
+                                    f"{result['adj_r_squared']:.3f}"
+                                )
+                                m3.metric(
+                                    "Model p-value",
+                                    f"{result['f_p_value']:.4f}"
+                                )
+                                m4.metric("Observations", f"{result['n']:,}")
+
+                                if result["rows_dropped"]:
+                                    st.caption(
+                                        f"{result['rows_dropped']} rows with "
+                                        f"missing values were excluded."
+                                    )
+
+                                for note in result["notes"]:
+                                    st.caption(note)
+
+                                st.subheader("Coefficients")
+
+                                st.dataframe(
+                                    result["coefficients"].round(4),
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+
+                                st.subheader("Interpretation")
+
+                                for line in interpret_linear_regression(result):
+                                    st.write(line)
+
+                                for warning in linear_regression_warnings(result):
+                                    st.warning(warning)
+
+                                with st.expander(
+                                    "Assumption checks & residual plot"
+                                ):
+
+                                    st.write(
+                                        f"**Residual normality (Shapiro-Wilk) "
+                                        f"p-value:** "
+                                        f"{result['shapiro_p']:.4f}"
+                                    )
+
+                                    st.write(
+                                        f"**Equal variance (Breusch-Pagan) "
+                                        f"p-value:** "
+                                        f"{result['breusch_pagan_p']:.4f}"
+                                    )
+
+                                    if result["vif"] is not None:
+                                        st.write("**Multicollinearity (VIF)**")
+                                        st.dataframe(
+                                            result["vif"].round(2),
+                                            use_container_width=True,
+                                            hide_index=True
+                                        )
+
+                                    import plotly.express as px
+
+                                    st.plotly_chart(
+                                        px.scatter(
+                                            result["diagnostics"],
+                                            x="Fitted",
+                                            y="Residual",
+                                            title="Residuals vs fitted values"
+                                        ),
+                                        use_container_width=True
+                                    )
+
+                # ============================================================
+                # BINARY LOGISTIC REGRESSION
+                # ============================================================
+
+                elif analysis_design == "Binary logistic regression":
+
+                    st.subheader("🎯 Binary Logistic Regression")
+
+                    st.write(
+                        "Models the probability of a yes/no outcome from one "
+                        "or more predictors. Results are reported as odds "
+                        "ratios."
+                    )
+
+                    binary_candidates = binary_outcome_candidates(df)
+
+                    if not binary_candidates:
+
+                        st.warning(
+                            "No variable with exactly two categories was "
+                            "found. Recode your outcome into two groups "
+                            "(for example Yes/No) in the Clean page first."
+                        )
+
+                    else:
+
+                        log_outcome = st.selectbox(
+                            "Binary outcome (Y)",
+                            binary_candidates,
+                            key="logreg_outcome"
+                        )
+
+                        outcome_levels = sorted(
+                            df[log_outcome].dropna().astype(str).unique()
+                        )
+
+                        log_event = st.selectbox(
+                            "Event category (the outcome you want to predict)",
+                            outcome_levels,
+                            index=len(outcome_levels) - 1,
+                            key=f"logreg_event_{log_outcome}"
+                        )
+
+                        log_predictors = st.multiselect(
+                            "Predictors (X)",
+                            [c for c in df.columns if c != log_outcome],
+                            key=f"logreg_predictors_{log_outcome}"
+                        )
+
+                        if st.button(
+                            "▶ Run Logistic Regression",
+                            key="run_logreg"
+                        ):
+
+                            result = binary_logistic_regression(
+                                df,
+                                log_outcome,
+                                log_predictors,
+                                positive_class=log_event
+                            )
+
+                            if "error" in result:
+
+                                st.error(result["error"])
+
+                            else:
+
+                                m1, m2, m3, m4 = st.columns(4)
+
+                                m1.metric(
+                                    "McFadden R²",
+                                    f"{result['mcfadden_r2']:.3f}"
+                                )
+                                m2.metric(
+                                    "Model p-value",
+                                    f"{result['llr_p_value']:.4f}"
+                                )
+                                m3.metric("AUC", f"{result['auc']:.3f}")
+                                m4.metric(
+                                    "Accuracy",
+                                    f"{result['accuracy'] * 100:.1f}%"
+                                )
+
+                                st.caption(
+                                    f"{result['n']:,} observations — "
+                                    f"{result['events']:,} "
+                                    f"'{result['positive_class']}', "
+                                    f"{result['non_events']:,} "
+                                    f"'{result['negative_class']}'."
+                                )
+
+                                if result["rows_dropped"]:
+                                    st.caption(
+                                        f"{result['rows_dropped']} rows with "
+                                        f"missing values were excluded."
+                                    )
+
+                                for note in result["notes"]:
+                                    st.caption(note)
+
+                                st.subheader("Coefficients & odds ratios")
+
+                                st.dataframe(
+                                    result["coefficients"].round(4),
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+
+                                st.subheader("Interpretation")
+
+                                for line in interpret_logistic_regression(result):
+                                    st.write(line)
+
+                                for warning in logistic_regression_warnings(result):
+                                    st.warning(warning)
+
+                                with st.expander("Classification table"):
+
+                                    st.write(
+                                        "Predicted using a 0.5 probability "
+                                        "cut-off."
+                                    )
+
+                                    st.dataframe(
+                                        result["confusion"],
+                                        use_container_width=True
+                                    )
+
+                                    st.write(
+                                        f"**Sensitivity:** "
+                                        f"{result['sensitivity'] * 100:.1f}%  "
+                                        f"|  **Specificity:** "
+                                        f"{result['specificity'] * 100:.1f}%"
+                                    )
+
+
+            with tab_nonparam:
+                # ============================================================
+                # NON-PARAMETRIC ANALYSIS GUIDE
+                # ============================================================
+                st.divider()
+                st.header("📉 Non-Parametric Analysis Guide")
                 st.write(
-                    explanation["what"]
+                    "Statify explains why a rank-based method may be appropriate "
+                "instead of simply giving the test name."
                 )
-                st.subheader("Why might Statify recommend it?")
-                st.write(
-                    explanation["why"]
+                nonparametric_test = st.selectbox(
+                    "Choose a non-parametric method",
+                    [
+                        "Mann-Whitney U",
+                        "Wilcoxon signed-rank",
+                        "Kruskal-Wallis"
+                    ],
+                    key="nonparametric_guide"
                 )
-                st.subheader("⚠️ Important interpretation")
-                st.warning(
-                    explanation["not_what"]
+                if nonparametric_test == "Mann-Whitney U":
+                    explanation = explain_mann_whitney()
+                    st.subheader("What is it?")
+                    st.write(
+                        explanation["what"]
+                    )
+                    st.subheader("Why might Statify recommend it?")
+                    st.write(
+                        explanation["why"]
+                    )
+                    st.subheader("⚠️ Important interpretation")
+                    st.warning(
+                        explanation["not_what"]
+                    )
+                    st.subheader("How should the result be interpreted?")
+                    st.write(
+                        explanation["interpretation"]
+                    )
+                elif nonparametric_test == "Wilcoxon signed-rank":
+                    explanation = explain_wilcoxon()
+                    st.subheader("What is it?")
+                    st.write(
+                        explanation["what"]
+                    )
+                    st.subheader("Why might Statify recommend it?")
+                    st.write(
+                        explanation["why"]
+                    )
+                    st.subheader("How should the result be interpreted?")
+                    st.write(
+                        explanation["interpretation"]
+                    )
+                else:
+                    explanation = explain_kruskal()
+                    st.subheader("What is it?")
+                    st.write(
+                        explanation["what"]
+                    )
+                    st.subheader("Why might Statify recommend it?")
+                    st.write(
+                        explanation["why"]
+                    )
+                    st.subheader("How should the result be interpreted?")
+                    st.write(
+                        explanation["interpretation"]
+                    )
+                    st.subheader("Important")
+                    st.warning(
+                        explanation["important"]
+                    )
+                st.info(
+                    nonparametric_warning()
                 )
-                st.subheader("How should the result be interpreted?")
-                st.write(
-                    explanation["interpretation"]
-                )
-            elif nonparametric_test == "Wilcoxon signed-rank":
-                explanation = explain_wilcoxon()
-                st.subheader("What is it?")
-                st.write(
-                    explanation["what"]
-                )
-                st.subheader("Why might Statify recommend it?")
-                st.write(
-                    explanation["why"]
-                )
-                st.subheader("How should the result be interpreted?")
-                st.write(
-                    explanation["interpretation"]
-                )
-            else:
-                explanation = explain_kruskal()
-                st.subheader("What is it?")
-                st.write(
-                    explanation["what"]
-                )
-                st.subheader("Why might Statify recommend it?")
-                st.write(
-                    explanation["why"]
-                )
-                st.subheader("How should the result be interpreted?")
-                st.write(
-                    explanation["interpretation"]
-                )
-                st.subheader("Important")
-                st.warning(
-                    explanation["important"]
-                )
-            st.info(
-                nonparametric_warning()
-            )
+
 
 
             # ============================================================
