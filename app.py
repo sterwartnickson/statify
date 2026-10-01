@@ -2,6 +2,7 @@ import textwrap
 import io
 import streamlit as st
 import pandas as pd
+import numpy as np
 from cleaning_engine import (
     create_working_copy,
     duplicate_summary,
@@ -108,10 +109,13 @@ from diagnostics_engine import (
 )
 from test_engine import (
     recommend_tests,
-    independent_t_test,
-    one_way_anova,
     interpret_p_value,
 )
+# These come from analysis_engine, not test_engine: they drop missing rows and
+# return the keys the Analyze page reads ("test", "statistic", "p_value", ...).
+# (test_engine's versions return "Statistic"/"Groups" and no "test" key, which
+# caused KeyError: 'test'.)
+from analysis_engine import one_way_anova, independent_t_test
 
 from data_engine import (
     load_dataset,
@@ -163,6 +167,137 @@ from custom_dashboard import render_custom_dashboard, style_dark, PALETTE as CHA
 # ============================================================
 # STATIFY — BATCH 7 NAVIGATION SHELL
 # ============================================================
+
+# ============================================================
+# CLASSIC ANOVA TABLE HELPERS
+# (self-contained: do not depend on engine file versions)
+# ============================================================
+
+def classic_oneway_anova_table(outcome, group):
+    """Source | SS | df | MS | F | p for a one-way ANOVA, or None."""
+
+    from scipy import stats as _stats
+
+    data = pd.DataFrame({
+        "y": pd.to_numeric(outcome, errors="coerce"),
+        "g": group
+    }).dropna()
+
+    samples = [v["y"].values for _, v in data.groupby("g")]
+
+    if len(samples) < 2:
+        return None
+
+    n_total = len(data)
+    k = len(samples)
+    grand = data["y"].mean()
+
+    ssb = float(sum(len(x) * (x.mean() - grand) ** 2 for x in samples))
+    sse = float(sum(((x - x.mean()) ** 2).sum() for x in samples))
+    sst = ssb + sse
+
+    df_b, df_w, df_t = k - 1, n_total - k, n_total - 1
+
+    if df_w <= 0 or sse == 0:
+        return None
+
+    msb, mse = ssb / df_b, sse / df_w
+    f_value = msb / mse
+    p_value = float(_stats.f.sf(f_value, df_b, df_w))
+
+    return pd.DataFrame({
+        "Source": [
+            "Between groups (SSB)",
+            "Within groups / Error (SSE)",
+            "Total (SST)"
+        ],
+        "SS": [ssb, sse, sst],
+        "df": [df_b, df_w, df_t],
+        "MS": [msb, mse, np.nan],
+        "F": [f_value, np.nan, np.nan],
+        "p-value": [p_value, np.nan, np.nan],
+        "η²": [ssb / sst if sst else np.nan, np.nan, np.nan],
+    })
+
+
+def classic_two_way_table(raw_table, factor_a, factor_b):
+    """Turn a statsmodels anova_lm table into Source|SS|df|MS|F|p|partial η²."""
+
+    sse = float(raw_table.loc["Residual", "sum_sq"])
+    rows = []
+
+    for name in raw_table.index:
+
+        ss = float(raw_table.loc[name, "sum_sq"])
+        dfv = float(raw_table.loc[name, "df"])
+        ms = ss / dfv if dfv > 0 else np.nan
+
+        if name == "Residual":
+            label = "Error (SSE)"
+            f_value = p_value = eta = np.nan
+        else:
+            if ":" in name:
+                label = f"{factor_a} × {factor_b} (interaction)"
+            elif f'"{factor_a}"' in name:
+                label = f"{factor_a} (main effect)"
+            elif f'"{factor_b}"' in name:
+                label = f"{factor_b} (main effect)"
+            else:
+                label = name
+            f_value = raw_table.loc[name, "F"]
+            p_value = raw_table.loc[name, "PR(>F)"]
+            eta = ss / (ss + sse) if (ss + sse) else np.nan
+
+        rows.append({
+            "Source": label,
+            "SS": ss,
+            "df": dfv,
+            "MS": ms,
+            "F": f_value,
+            "p-value": p_value,
+            "Partial η²": eta,
+        })
+
+    rows.append({
+        "Source": "Total (SST)",
+        "SS": float(raw_table["sum_sq"].sum()),
+        "df": float(raw_table["df"].sum()),
+        "MS": np.nan,
+        "F": np.nan,
+        "p-value": np.nan,
+        "Partial η²": np.nan,
+    })
+
+    return pd.DataFrame(rows)
+
+
+def show_anova_table(table):
+    """Display an ANOVA table with blanks instead of NaN."""
+
+    display = table.copy()
+
+    for column in display.columns:
+
+        if column == "Source":
+            continue
+
+        if column == "df":
+            display[column] = [
+                "" if pd.isna(v) else f"{int(round(v))}"
+                for v in display[column]
+            ]
+        else:
+            display[column] = [
+                "" if pd.isna(v) else f"{v:.4f}"
+                for v in display[column]
+            ]
+
+    st.dataframe(
+        display,
+        use_container_width=True,
+        hide_index=True
+    )
+
 
 st.set_page_config(
     page_title="Statify",
@@ -3479,6 +3614,57 @@ else:
                                         )
 
                                     # ========================================================
+                                    # STANDARD ANOVA TABLE
+                                    # ========================================================
+
+                                    st.subheader("🧮 ANOVA Table")
+
+                                    anova_table = classic_oneway_anova_table(
+                                        df[outcome],
+                                        df[group]
+                                    )
+
+                                    if anova_table is None:
+
+                                        st.warning(
+                                            "The ANOVA table could not be "
+                                            "built (not enough variation or "
+                                            "observations)."
+                                        )
+
+                                    else:
+
+                                        show_anova_table(anova_table)
+
+                                        s1, s2, s3, s4 = st.columns(4)
+
+                                        s1.metric(
+                                            "SSB (between)",
+                                            f"{anova_table.loc[0, 'SS']:.4f}"
+                                        )
+                                        s2.metric(
+                                            "SSE (error)",
+                                            f"{anova_table.loc[1, 'SS']:.4f}"
+                                        )
+                                        s3.metric(
+                                            "SST (total)",
+                                            f"{anova_table.loc[2, 'SS']:.4f}"
+                                        )
+                                        s4.metric(
+                                            "Eta squared (η²)",
+                                            f"{anova_table.loc[0, 'η²']:.4f}"
+                                        )
+
+                                        st.caption(
+                                            "SSB = variation between group "
+                                            "means (treatment sum of squares); "
+                                            "SSE = variation within groups "
+                                            "(error); SST = SSB + SSE; "
+                                            "MS = SS / df; F = MSB / MSE; "
+                                            "η² = SSB / SST."
+                                        )
+
+                                    # ========================================================
                                     # GROUP DESCRIPTIVES
                                     # ========================================================
 
@@ -3642,6 +3828,22 @@ else:
                                             "p-value",
                                             f"{result['p_value']:.4f}"
                                         )
+
+                                    st.subheader("🧮 Classic ANOVA Table")
+
+                                    st.caption(
+                                        "Shown for reference. The classic "
+                                        "table assumes equal variances; the "
+                                        "Welch F and p-value above do not."
+                                    )
+
+                                    welch_table = classic_oneway_anova_table(
+                                        df[outcome],
+                                        df[group]
+                                    )
+
+                                    if welch_table is not None:
+                                        show_anova_table(welch_table)
 
                                     st.write(
                                         welch_guidance(
@@ -3969,9 +4171,14 @@ else:
 
                                 table = result["anova_table"]
 
-                                st.dataframe(
-                                    table,
-                                    use_container_width=True
+                                st.subheader("🧮 ANOVA Table")
+
+                                show_anova_table(
+                                    classic_two_way_table(
+                                        table,
+                                        factor_a,
+                                        factor_b
+                                    )
                                 )
 
                                 st.info(
